@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	publicapiv1 "github.com/astralis-s/hakaton-ansar/internal/publicapi/v1"
 	"github.com/astralis-s/hakaton-ansar/internal/seed"
 	"github.com/astralis-s/hakaton-ansar/migrations"
+	webui "github.com/astralis-s/hakaton-ansar/web"
 )
 
 // @title           Amana Public API
@@ -186,6 +188,20 @@ func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Mod
 
 	// Swagger UI for the public API.
 	httpserver.MountSwagger(r, openapi.SpecJSON)
+
+	// Embedded single-page frontend (served at / and /assets/*). Unknown non-API
+	// paths fall back to the SPA shell so deep links work; API/Swagger 404s stay 404.
+	webHandler := webui.Handler()
+	r.Get("/", webHandler.ServeHTTP)
+	r.Handle("/assets/*", webHandler)
+	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
+		p := req.URL.Path
+		if req.Method != http.MethodGet || strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/swagger") {
+			web.JSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		webHandler.ServeHTTP(w, req)
+	})
 
 	// Internal application API (SPA) — JWT.
 	r.Route("/api/app", func(ar chi.Router) {
