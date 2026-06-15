@@ -17,6 +17,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/astralis-s/hakaton-ansar/api/openapi"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/catalog"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/crm"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/config"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/database"
@@ -85,6 +87,8 @@ func run() error {
 		JWTSecret: cfg.Auth.JWTSecret,
 		JWTTTL:    cfg.Auth.JWTTTL,
 	})
+	catalogModule := catalog.New(catalog.Deps{Pool: pool, Log: log})
+	crmModule := crm.New(crm.Deps{Pool: pool, Log: log})
 
 	srv := httpserver.New(httpserver.Config{
 		Port:               cfg.HTTP.Port,
@@ -94,13 +98,13 @@ func run() error {
 		CORSAllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 	}, log)
 
-	mountRoutes(srv.Router(), iamModule)
+	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule)
 
 	return srv.Run(ctx)
 }
 
 // mountRoutes registers the health check, Swagger UI and the two API surfaces.
-func mountRoutes(r chi.Router, iamModule *iam.Module) {
+func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module) {
 	// Liveness probe — always 200 once the server is up.
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		web.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -118,7 +122,9 @@ func mountRoutes(r chi.Router, iamModule *iam.Module) {
 		ar.Group(func(pr chi.Router) {
 			pr.Use(iamModule.JWTMiddleware())
 			iamModule.RegisterProtectedAppRoutes(pr)
-			// Phase 3+: catalog, crm, financing, scheduling mount here.
+			catalogModule.RegisterRoutes(pr)
+			crmModule.RegisterRoutes(pr)
+			// Phase 4+: financing, scheduling mount here.
 		})
 	})
 

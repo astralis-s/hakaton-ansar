@@ -8,11 +8,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/astralis-s/hakaton-ansar/internal/modules/catalog"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/crm"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
 )
 
-// newTestRouter builds the real route tree. The iam module is constructed with a
-// nil pool: the routes exercised here (health, swagger, and the auth-rejection
+// newTestRouter builds the real route tree. Modules are constructed with a nil
+// pool: the routes exercised here (health, swagger, and the auth-rejection
 // paths) never reach the database.
 func newTestRouter() chi.Router {
 	iamModule := iam.New(iam.Deps{
@@ -22,8 +24,10 @@ func newTestRouter() chi.Router {
 		JWTSecret: "test-secret",
 		JWTTTL:    0,
 	})
+	catalogModule := catalog.New(catalog.Deps{Pool: nil, Log: nil})
+	crmModule := crm.New(crm.Deps{Pool: nil, Log: nil})
 	r := chi.NewRouter()
-	mountRoutes(r, iamModule)
+	mountRoutes(r, iamModule, catalogModule, crmModule)
 	return r
 }
 

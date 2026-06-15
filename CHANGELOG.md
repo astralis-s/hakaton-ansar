@@ -171,3 +171,14 @@
 - **Миграция** `00002_iam` (organizations, users, api_keys; FK, unique email/hash, индексы).
 - **Тесты**: table-driven доменные (Role, конструкторы User/Org/ApiKey + невалидные кейсы, детерминизм `HashAPIKey`) и `Login` на фейках (успех / неизвестный email / неверный пароль) — зелёные.
 - **Проверка рантайма** (реальный PG 16, сквозной флоу): setup→201, повтор→409, login→JWT, `/auth/me` 200/401, владелец создаёт менеджера→201, дубль email→409, выпуск API-ключа (секрет один раз), `/api/v1/ping` по `X-API-Key` 200, неверный/без ключа→401, **менеджер на owner-only→403**, неверный пароль→401.
+
+### Фаза 3 — Catalog + CRM ✅
+Два модуля по skill `new-module`, плюс shared-kernel `Money`.
+- **shared kernel `internal/shared/money`**: value object `Money` на `shopspring/decimal` (чистый — только stdlib + decimal), нормализация до 2 знаков, `Cents() int64` для будущей графиковой математики, сериализация строкой; методы `Add/Sub/Cmp/Equals/IsPositive/...` с проверкой валюты. Лежит в shared kernel, т.к. его используют и catalog, и financing — чтобы не связывать модули (`catalog → financing`). Table-driven тесты (parse, Cents, round-trip, валютный mismatch, округление).
+- **catalog**: `Product` (+ VO `HalalStatus` halal/haram/doubtful — обязателен), инвариант `CostPrice > 0`, `IsHaram()/CanBeFinanced()` (харам в каталоге допустим, к финансированию — нет); CRUD (`Create/Get/List/Update`), всё scoped по организации; деньги ↔ `numeric(18,2)`.
+- **crm**: `Client` (ФИО обязательно, телефон/документ опциональны), CRUD scoped по организации.
+- **platform**: новый `platform/pgconv` (UUID/Timestamp/Numeric ↔ домен, детект unique-violation) — переиспользуют все репозитории.
+- **http**: оба модуля под `/api/app` (JWT, обе роли); деньги на границе — строка-decimal; централизованный маппинг ошибок.
+- **Миграции** `00003_catalog` (products: `cost_price numeric(18,2) CHECK >0`, `halal_status CHECK IN`, FK, индекс), `00004_crm` (clients: FK, индекс).
+- **Тесты**: доменные table-driven (HalalStatus, конструкторы Product/Client + невалидные кейсы, `Update` сохраняет identity) — зелёные.
+- **Проверка рантайма** (реальный PG 16): CRUD товаров и клиентов; round-trip денег `85000.00 → 90000.00` через `numeric`; `can_be_financed` true/haram→false; изоляция по организации (несуществующий → 404); невалидные входы (`cost_price=abc/0`, `halal_status=mushbooh`, пустое ФИО) → 400; без токена → 401.

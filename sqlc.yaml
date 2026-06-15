@@ -10,7 +10,7 @@ sql:
     schema: migrations
     queries: internal/modules/iam/infra/queries
     gen:
-      go:
+      go: &gen
         package: sqlcgen
         out: internal/modules/iam/infra/sqlcgen
         sql_package: pgx/v5
@@ -18,3 +18,19 @@ sql:
         emit_interface: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
+  - name: catalog
+    engine: postgresql
+    schema: migrations
+    queries: internal/modules/catalog/infra/queries
+    gen:
+      go:
+        <<: *gen
+        out: internal/modules/catalog/infra/sqlcgen
+  - name: crm
+    engine: postgresql
+    schema: migrations
+    queries: internal/modules/crm/infra/queries
+    gen:
+      go:
+        <<: *gen
+        out: internal/modules/crm/infra/sqlcgen
