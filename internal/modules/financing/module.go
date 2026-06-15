@@ -31,7 +31,9 @@ type Deps struct {
 
 // Module is the assembled financing module.
 type Module struct {
-	handler *financinghttp.Handler
+	handler        *financinghttp.Handler
+	createContract *app.CreateContract
+	getContract    *app.GetContract
 }
 
 // New wires the financing module.
@@ -39,10 +41,13 @@ func New(d Deps) *Module {
 	contracts := infra.NewContractRepository(d.Pool)
 	charity := infra.NewCharityRepository(d.Pool)
 
+	createContract := app.NewCreateContract(contracts, d.Products, d.Clients, d.Tx)
+	getContract := app.NewGetContract(contracts)
+
 	handler := financinghttp.NewHandler(financinghttp.HandlerDeps{
 		Preview:     app.NewPreviewContract(d.ComparisonRatePercent),
-		Create:      app.NewCreateContract(contracts, d.Products, d.Clients, d.Tx),
-		Get:         app.NewGetContract(contracts),
+		Create:      createContract,
+		Get:         getContract,
 		List:        app.NewListContracts(contracts),
 		Pay:         app.NewRegisterPayment(contracts, d.Tx),
 		Settle:      app.NewSettleEarly(contracts, d.Tx),
@@ -52,10 +57,17 @@ func New(d Deps) *Module {
 		Log:         d.Log,
 		OwnerOnly:   d.OwnerOnly,
 	})
-	return &Module{handler: handler}
+	return &Module{handler: handler, createContract: createContract, getContract: getContract}
 }
 
 // RegisterRoutes mounts the financing routes onto a JWT-protected router.
 func (m *Module) RegisterRoutes(r chi.Router) {
 	m.handler.RegisterRoutes(r)
 }
+
+// CreateContractUseCase exposes the create use-case for the public API (thin
+// layer over the same application service — no logic duplication).
+func (m *Module) CreateContractUseCase() *app.CreateContract { return m.createContract }
+
+// GetContractUseCase exposes the get use-case for the public API.
+func (m *Module) GetContractUseCase() *app.GetContract { return m.getContract }

@@ -1,0 +1,232 @@
+basePath: /api/v1
+definitions:
+  v1.ContractResponse:
+    properties:
+      cadence:
+        example: monthly
+        type: string
+      client_id:
+        type: string
+      cost_price:
+        example: "100000.00"
+        type: string
+      down_payment:
+        example: "30000.00"
+        type: string
+      financed_amount:
+        example: "90000.00"
+        type: string
+      id:
+        type: string
+      installments:
+        example: 6
+        type: integer
+      markup:
+        example: "20000.00"
+        type: string
+      outstanding:
+        example: "90000.00"
+        type: string
+      product_id:
+        type: string
+      sale_price:
+        example: "120000.00"
+        type: string
+      start_date:
+        example: "2026-07-01"
+        type: string
+      status:
+        example: active
+        type: string
+    type: object
+  v1.CreateContractRequest:
+    properties:
+      cadence:
+        enum:
+        - weekly
+        - monthly
+        example: monthly
+        type: string
+      client_id:
+        example: 6f9619ff-8b86-d011-b42d-00cf4fc964ff
+        type: string
+      cost_price:
+        example: "100000.00"
+        type: string
+      down_payment:
+        example: "30000.00"
+        type: string
+      installments:
+        example: 6
+        minimum: 1
+        type: integer
+      markup:
+        example: "20000.00"
+        type: string
+      product_id:
+        example: 7a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d
+        type: string
+      start_date:
+        example: "2026-07-01"
+        type: string
+    required:
+    - cadence
+    - client_id
+    - cost_price
+    - installments
+    - markup
+    - product_id
+    - start_date
+    type: object
+  v1.ErrorBody:
+    properties:
+      code:
+        example: invalid_input
+        type: string
+      message:
+        example: down payment must be less than sale price
+        type: string
+    type: object
+  v1.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/v1.ErrorBody'
+    type: object
+  v1.InstallmentDTO:
+    properties:
+      amount:
+        example: "15000.00"
+        type: string
+      due_date:
+        example: "2026-07-01"
+        type: string
+      number:
+        example: 1
+        type: integer
+      status:
+        example: pending
+        type: string
+    type: object
+  v1.PaymentDTO:
+    properties:
+      amount:
+        example: "15000.00"
+        type: string
+      paid_at:
+        type: string
+    type: object
+  v1.PaymentsResponse:
+    properties:
+      contract_id:
+        type: string
+      has_overdue:
+        example: false
+        type: boolean
+      outstanding:
+        example: "75000.00"
+        type: string
+      paid_amount:
+        example: "15000.00"
+        type: string
+      payments:
+        items:
+          $ref: '#/definitions/v1.PaymentDTO'
+        type: array
+      progress_percent:
+        example: "16.67"
+        type: string
+      sale_price:
+        example: "120000.00"
+        type: string
+      schedule:
+        items:
+          $ref: '#/definitions/v1.InstallmentDTO'
+        type: array
+      status:
+        example: active
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Публичный API CRM «Амана» (мурабаха-рассрочка без рибы).
+  title: Amana Public API
+  version: 0.1.0
+paths:
+  /contracts:
+    post:
+      consumes:
+      - application/json
+      description: Creates an installment contract referencing an existing client
+        and product. The sale price is fixed at creation (cost + markup); the debt
+        never grows with time. Money fields are decimal strings (e.g. "120000.00").
+      parameters:
+      - description: Contract terms
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1.CreateContractRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/v1.ContractResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create an installment contract (murabaha)
+      tags:
+      - contracts
+  /contracts/{id}/payments:
+    get:
+      description: Returns the outstanding balance, progress and the full installment
+        schedule (with derived statuses) plus registered payments.
+      parameters:
+      - description: Contract ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.PaymentsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get a contract's payment status and schedule
+      tags:
+      - contracts
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: X-API-Key
+    type: apiKey
+swagger: "2.0"

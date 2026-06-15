@@ -19,6 +19,7 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/scheduling"
 	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
 	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
+	publicapiv1 "github.com/astralis-s/hakaton-ansar/internal/publicapi/v1"
 )
 
 // newTestRouter builds the real route tree. Modules are constructed with a nil
@@ -51,8 +52,13 @@ func newTestRouter() chi.Router {
 		Policy:   schedulingdomain.DefaultPolicy(),
 		Location: prayerLoc,
 	})
+	publicAPI := publicapiv1.New(publicapiv1.Deps{
+		CreateContract: financingModule.CreateContractUseCase(),
+		GetContract:    financingModule.GetContractUseCase(),
+		Log:            nil,
+	})
 	r := chi.NewRouter()
-	mountRoutes(r, iamModule, catalogModule, crmModule, financingModule, schedulingModule)
+	mountRoutes(r, iamModule, catalogModule, crmModule, financingModule, schedulingModule, publicAPI)
 	return r
 }
 
@@ -68,7 +74,7 @@ func TestPublicRoutes(t *testing.T) {
 		{"health", http.MethodGet, "/health", http.StatusOK},
 		{"swagger doc", http.MethodGet, "/swagger/doc.json", http.StatusOK},
 		{"protected app route without token → 401", http.MethodGet, "/api/app/auth/me", http.StatusUnauthorized},
-		{"public api route without key → 401", http.MethodGet, "/api/v1/ping", http.StatusUnauthorized},
+		{"public api route without key → 401", http.MethodGet, "/api/v1/contracts/00000000-0000-0000-0000-000000000000/payments", http.StatusUnauthorized},
 		{"unknown route → 404", http.MethodGet, "/nope", http.StatusNotFound},
 	}
 

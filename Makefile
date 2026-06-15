@@ -29,9 +29,9 @@ migrate:
 sqlc:
 	sqlc generate
 
-## swag: regenerate the public OpenAPI spec (json+yaml only, no docs.go) (requires swag; Phase 6)
+## swag: regenerate the public OpenAPI spec (json+yaml only, no docs.go) (requires swag)
 swag:
-	swag init -g cmd/api/main.go -o api/openapi --outputTypes json,yaml --parseDependency --parseInternal
+	swag init -g cmd/api/main.go -o api/openapi --outputTypes json,yaml --parseInternal
 
 ## lint: static checks (go vet; swap for golangci-lint if installed)
 lint:

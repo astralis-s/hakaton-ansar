@@ -32,6 +32,7 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/platform/httpserver"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/logger"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/web"
+	publicapiv1 "github.com/astralis-s/hakaton-ansar/internal/publicapi/v1"
 	"github.com/astralis-s/hakaton-ansar/migrations"
 )
 
@@ -115,6 +116,13 @@ func run() error {
 		Location: prayerLoc,
 	})
 
+	// Public API (+3) — thin layer over the same financing use-cases.
+	publicAPI := publicapiv1.New(publicapiv1.Deps{
+		CreateContract: financingModule.CreateContractUseCase(),
+		GetContract:    financingModule.GetContractUseCase(),
+		Log:            log,
+	})
+
 	srv := httpserver.New(httpserver.Config{
 		Port:               cfg.HTTP.Port,
 		ReadTimeout:        cfg.HTTP.ReadTimeout,
@@ -123,7 +131,7 @@ func run() error {
 		CORSAllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 	}, log)
 
-	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule, financingModule, schedulingModule)
+	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule, financingModule, schedulingModule, publicAPI)
 
 	return srv.Run(ctx)
 }
@@ -157,7 +165,7 @@ func prayerPolicy(p config.Prayer) schedulingdomain.Policy {
 }
 
 // mountRoutes registers the health check, Swagger UI and the two API surfaces.
-func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module, financingModule *financing.Module, schedulingModule *scheduling.Module) {
+func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module, financingModule *financing.Module, schedulingModule *scheduling.Module, publicAPI *publicapiv1.Module) {
 	// Liveness probe — always 200 once the server is up.
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		web.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -185,9 +193,6 @@ func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Mod
 	// Public API (+3) — X-API-Key.
 	r.Route("/api/v1", func(vr chi.Router) {
 		vr.Use(iamModule.APIKeyMiddleware())
-		vr.Get("/ping", func(w http.ResponseWriter, _ *http.Request) {
-			web.JSON(w, http.StatusOK, map[string]string{"surface": "v1", "status": "ok"})
-		})
-		// Phase 6: publicapi mounts here.
+		publicAPI.RegisterRoutes(vr)
 	})
 }

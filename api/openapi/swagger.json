@@ -1,18 +1,333 @@
 {
-  "swagger": "2.0",
-  "info": {
-    "title": "Amana Public API",
-    "description": "Публичный API CRM «Амана» — рассрочка по модели мурабаха (без рибы). Авторизация по заголовку X-API-Key. Внутренний API приложения (/api/app, JWT) здесь не документируется. Полный набор эндпоинтов появится в Фазе 6.",
-    "version": "0.1.0"
-  },
-  "basePath": "/api/v1",
-  "schemes": ["http"],
-  "securityDefinitions": {
-    "ApiKeyAuth": {
-      "type": "apiKey",
-      "name": "X-API-Key",
-      "in": "header"
+    "swagger": "2.0",
+    "info": {
+        "description": "Публичный API CRM «Амана» (мурабаха-рассрочка без рибы).",
+        "title": "Amana Public API",
+        "contact": {},
+        "version": "0.1.0"
+    },
+    "basePath": "/api/v1",
+    "paths": {
+        "/contracts": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Creates an installment contract referencing an existing client and product. The sale price is fixed at creation (cost + markup); the debt never grows with time. Money fields are decimal strings (e.g. \"120000.00\").",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "contracts"
+                ],
+                "summary": "Create an installment contract (murabaha)",
+                "parameters": [
+                    {
+                        "description": "Contract terms",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.CreateContractRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ContractResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/contracts/{id}/payments": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the outstanding balance, progress and the full installment schedule (with derived statuses) plus registered payments.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "contracts"
+                ],
+                "summary": "Get a contract's payment status and schedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Contract ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.PaymentsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "v1.ContractResponse": {
+            "type": "object",
+            "properties": {
+                "cadence": {
+                    "type": "string",
+                    "example": "monthly"
+                },
+                "client_id": {
+                    "type": "string"
+                },
+                "cost_price": {
+                    "type": "string",
+                    "example": "100000.00"
+                },
+                "down_payment": {
+                    "type": "string",
+                    "example": "30000.00"
+                },
+                "financed_amount": {
+                    "type": "string",
+                    "example": "90000.00"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "installments": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "markup": {
+                    "type": "string",
+                    "example": "20000.00"
+                },
+                "outstanding": {
+                    "type": "string",
+                    "example": "90000.00"
+                },
+                "product_id": {
+                    "type": "string"
+                },
+                "sale_price": {
+                    "type": "string",
+                    "example": "120000.00"
+                },
+                "start_date": {
+                    "type": "string",
+                    "example": "2026-07-01"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "active"
+                }
+            }
+        },
+        "v1.CreateContractRequest": {
+            "type": "object",
+            "required": [
+                "cadence",
+                "client_id",
+                "cost_price",
+                "installments",
+                "markup",
+                "product_id",
+                "start_date"
+            ],
+            "properties": {
+                "cadence": {
+                    "type": "string",
+                    "enum": [
+                        "weekly",
+                        "monthly"
+                    ],
+                    "example": "monthly"
+                },
+                "client_id": {
+                    "type": "string",
+                    "example": "6f9619ff-8b86-d011-b42d-00cf4fc964ff"
+                },
+                "cost_price": {
+                    "type": "string",
+                    "example": "100000.00"
+                },
+                "down_payment": {
+                    "type": "string",
+                    "example": "30000.00"
+                },
+                "installments": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 6
+                },
+                "markup": {
+                    "type": "string",
+                    "example": "20000.00"
+                },
+                "product_id": {
+                    "type": "string",
+                    "example": "7a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d"
+                },
+                "start_date": {
+                    "type": "string",
+                    "example": "2026-07-01"
+                }
+            }
+        },
+        "v1.ErrorBody": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "invalid_input"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "down payment must be less than sale price"
+                }
+            }
+        },
+        "v1.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/v1.ErrorBody"
+                }
+            }
+        },
+        "v1.InstallmentDTO": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "15000.00"
+                },
+                "due_date": {
+                    "type": "string",
+                    "example": "2026-07-01"
+                },
+                "number": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "status": {
+                    "type": "string",
+                    "example": "pending"
+                }
+            }
+        },
+        "v1.PaymentDTO": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "15000.00"
+                },
+                "paid_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1.PaymentsResponse": {
+            "type": "object",
+            "properties": {
+                "contract_id": {
+                    "type": "string"
+                },
+                "has_overdue": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "outstanding": {
+                    "type": "string",
+                    "example": "75000.00"
+                },
+                "paid_amount": {
+                    "type": "string",
+                    "example": "15000.00"
+                },
+                "payments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.PaymentDTO"
+                    }
+                },
+                "progress_percent": {
+                    "type": "string",
+                    "example": "16.67"
+                },
+                "sale_price": {
+                    "type": "string",
+                    "example": "120000.00"
+                },
+                "schedule": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.InstallmentDTO"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "example": "active"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "name": "X-API-Key",
+            "in": "header"
+        }
     }
-  },
-  "paths": {}
 }
