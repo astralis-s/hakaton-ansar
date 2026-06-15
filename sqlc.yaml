@@ -34,3 +34,11 @@ sql:
       go:
         <<: *gen
         out: internal/modules/crm/infra/sqlcgen
+  - name: financing
+    engine: postgresql
+    schema: migrations
+    queries: internal/modules/financing/infra/queries
+    gen:
+      go:
+        <<: *gen
+        out: internal/modules/financing/infra/sqlcgen

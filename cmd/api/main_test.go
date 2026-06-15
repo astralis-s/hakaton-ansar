@@ -8,8 +8,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/astralis-s/hakaton-ansar/internal/modules/catalog"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/crm"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/financing"
+	financinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/financing/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
 )
 
@@ -26,8 +30,17 @@ func newTestRouter() chi.Router {
 	})
 	catalogModule := catalog.New(catalog.Deps{Pool: nil, Log: nil})
 	crmModule := crm.New(crm.Deps{Pool: nil, Log: nil})
+	financingModule := financing.New(financing.Deps{
+		Pool:                  nil,
+		Tx:                    nil,
+		Log:                   nil,
+		ComparisonRatePercent: decimal.NewFromInt(28),
+		Products:              financinginfra.NewProductReader(catalogModule.Products()),
+		Clients:               financinginfra.NewClientReader(crmModule.Clients()),
+		OwnerOnly:             iamModule.OwnerMiddleware(),
+	})
 	r := chi.NewRouter()
-	mountRoutes(r, iamModule, catalogModule, crmModule)
+	mountRoutes(r, iamModule, catalogModule, crmModule, financingModule)
 	return r
 }
 

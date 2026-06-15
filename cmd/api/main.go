@@ -15,10 +15,13 @@ import (
 	"syscall"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 
 	"github.com/astralis-s/hakaton-ansar/api/openapi"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/catalog"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/crm"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/financing"
+	financinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/financing/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/config"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/database"
@@ -89,6 +92,15 @@ func run() error {
 	})
 	catalogModule := catalog.New(catalog.Deps{Pool: pool, Log: log})
 	crmModule := crm.New(crm.Deps{Pool: pool, Log: log})
+	financingModule := financing.New(financing.Deps{
+		Pool:                  pool,
+		Tx:                    txManager,
+		Log:                   log,
+		ComparisonRatePercent: decimal.NewFromInt(int64(cfg.Financing.ComparisonRatePercent)),
+		Products:              financinginfra.NewProductReader(catalogModule.Products()),
+		Clients:               financinginfra.NewClientReader(crmModule.Clients()),
+		OwnerOnly:             iamModule.OwnerMiddleware(),
+	})
 
 	srv := httpserver.New(httpserver.Config{
 		Port:               cfg.HTTP.Port,
@@ -98,13 +110,13 @@ func run() error {
 		CORSAllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 	}, log)
 
-	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule)
+	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule, financingModule)
 
 	return srv.Run(ctx)
 }
 
 // mountRoutes registers the health check, Swagger UI and the two API surfaces.
-func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module) {
+func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module, financingModule *financing.Module) {
 	// Liveness probe — always 200 once the server is up.
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		web.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -124,7 +136,8 @@ func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Mod
 			iamModule.RegisterProtectedAppRoutes(pr)
 			catalogModule.RegisterRoutes(pr)
 			crmModule.RegisterRoutes(pr)
-			// Phase 4+: financing, scheduling mount here.
+			financingModule.RegisterRoutes(pr)
+			// Phase 5+: scheduling mounts here.
 		})
 	})
 

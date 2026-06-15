@@ -85,6 +85,13 @@ func (m Money) Cmp(o Money) (int, error) {
 	return m.amount.Cmp(o.amount), nil
 }
 
+// Mul multiplies the amount by a unitless factor (e.g. a percentage as a
+// fraction), keeping the currency and re-normalizing to 2 places. Used for
+// markup-from-percent, which is then fixed as an amount.
+func (m Money) Mul(factor decimal.Decimal) Money {
+	return New(m.amount.Mul(factor), m.currency)
+}
+
 // Add returns m+o (same currency required).
 func (m Money) Add(o Money) (Money, error) {
 	if m.currency != o.currency {

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/astralis-s/hakaton-ansar/internal/modules/catalog/app"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/catalog/domain"
 	cataloghttp "github.com/astralis-s/hakaton-ansar/internal/modules/catalog/http"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/catalog/infra"
 )
@@ -21,6 +22,7 @@ type Deps struct {
 // Module is the assembled catalog module.
 type Module struct {
 	handler *cataloghttp.Handler
+	repo    domain.ProductRepository
 }
 
 // New wires the catalog module.
@@ -33,8 +35,11 @@ func New(d Deps) *Module {
 		Update: app.NewUpdateProduct(repo),
 		Log:    d.Log,
 	})
-	return &Module{handler: handler}
+	return &Module{handler: handler, repo: repo}
 }
+
+// Products exposes the product repository for cross-context reads (financing).
+func (m *Module) Products() domain.ProductRepository { return m.repo }
 
 // RegisterRoutes mounts the catalog routes onto a JWT-protected router.
 func (m *Module) RegisterRoutes(r chi.Router) {

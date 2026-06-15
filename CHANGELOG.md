@@ -182,3 +182,18 @@
 - **Миграции** `00003_catalog` (products: `cost_price numeric(18,2) CHECK >0`, `halal_status CHECK IN`, FK, индекс), `00004_crm` (clients: FK, индекс).
 - **Тесты**: доменные table-driven (HalalStatus, конструкторы Product/Client + невалидные кейсы, `Update` сохраняет identity) — зелёные.
 - **Проверка рантайма** (реальный PG 16): CRUD товаров и клиентов; round-trip денег `85000.00 → 90000.00` через `numeric`; `can_be_financed` true/haram→false; изоляция по организации (несуществующий → 404); невалидные входы (`cost_price=abc/0`, `halal_status=mushbooh`, пустое ФИО) → 400; без токена → 401.
+
+### Фаза 4 — Financing (★ ядро, мурабаха) ✅
+Модуль `internal/modules/financing` строго по skill `murabaha-engine`. Это финансовая корректность всего продукта.
+- **domain** (стерилен): агрегат `Contract` (приватные поля, мутации только через методы), VO `Markup` (наценка суммой **или** из % — фиксируется суммой), `Cadence`, `ContractStatus` (state machine Draft→Active→Completed/Cancelled), `InstallmentStatus`; `Installment`/`Payment`; `CharityEntry` (садака — отдельный агрегат). `Money` берётся из shared kernel.
+- **Округление** детерминированное в копейках (`int64`): `base = total/N`, остаток — на **ранние** доли; `Σ == FinancedAmount` ровно. Инвариант `FinancedAmount >= Installments`.
+- **Инварианты 1–8** в конструкторе/методах; невалидный договор не создаётся.
+- **Статусы долей производны** от `paid = FinancedAmount − Outstanding` (не хранятся): `Paid`/`PartiallyPaid` (ровно одна на «фронте»)/`Pending`/`Overdue`.
+- **Анти-риба**: просрочка не меняет `SalePrice`/`Outstanding`/график; садака — **фиксированная**, в отдельный реестр, **не** в долг и **не** в выручку; начисляет **только владелец**. Досрочное погашение без штрафа.
+- **`Preview`** — чистый расчёт (график/цена/сравнение «без рибы vs кредит») без записи; общий код с `NewContract` → **preview == создание**.
+- **app**: `PreviewContract`, `CreateContract` (create+activate атомарно, блок Haram, проверка client/product через кросс-модульные порты `ProductReader`/`ClientReader`), `RegisterPayment`, `SettleEarly`, `CancelContract`, `AccrueLateCharity`, `Get/ListContracts`, `ListCharity` (транзакции через `TxManager`).
+- **infra**: sqlc-репозитории (contract-агрегат: contracts+installments+payments в одной tx; charity), деньги ↔ `numeric(18,2)`, даты ↔ `date`; адаптеры `ProductReader`/`ClientReader` поверх catalog/crm (шов для выноса в микросервис).
+- **http** (`/api/app`): `POST /contracts/preview`, CRUD договоров, `…/payments`, `…/settle`; **owner-only** `…/cancel` и `…/charity` (через `iam.OwnerMiddleware`); реестр `GET /charity` (обе роли). Деньги — строка-decimal.
+- **Миграция** `00005_financing` (contracts, installments, payments, charity_entries; FK на clients/products/users, CHECK статусов, индексы).
+- **Тесты**: **все 11 обязательных table-driven кейсов** skill (ровное деление; деление с остатком 33333.34/.33/.33; нулевой взнос; наценка из %; полное погашение; частичный платёж и статусы; просрочка не меняет долг; садака отдельно от долга; досрочное; preview==создание; недопустимые входы вкл. `FinancedAmount < Installments`, `Payment>Outstanding`, `Payment<=0`) — зелёные, с проверкой «копейки сходятся».
+- **Проверка рантайма** (реальный PG 16, сквозной флоу): preview (sale 120000.00 / financed 90000.00 / 6×15000.00 / overpayment 12600.00) == create; харам→409; частичный платёж → outstanding 70000.00, статусы `paid, partially_paid, pending×4`, прогресс 22.22%; переплата→400; **садака (owner) не изменила долг** (100000.00→100000.00), реестр total 500.00; досрочное→completed/0.00; отмена→cancelled; менеджер на charity/cancel→403.

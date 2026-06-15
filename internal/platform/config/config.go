@@ -14,11 +14,12 @@ type Config struct {
 	Env           string `env:"APP_ENV" envDefault:"development"`
 	MigrateOnBoot bool   `env:"MIGRATE_ON_BOOT" envDefault:"true"`
 
-	HTTP   HTTP
-	DB     DB
-	Auth   Auth
-	Logger Logger
-	Prayer Prayer
+	HTTP      HTTP
+	DB        DB
+	Auth      Auth
+	Logger    Logger
+	Prayer    Prayer
+	Financing Financing
 }
 
 // HTTP holds the HTTP server configuration.
@@ -47,6 +48,13 @@ type Auth struct {
 type Logger struct {
 	Level  string `env:"LOG_LEVEL" envDefault:"info"`  // debug|info|warn|error
 	Format string `env:"LOG_FORMAT" envDefault:"json"` // json|text
+}
+
+// Financing holds business settings for the murabaha core.
+type Financing struct {
+	// ComparisonRatePercent is the illustrative annual rate used only for the
+	// "no-riba vs conventional credit" comparison shown in the contract wizard.
+	ComparisonRatePercent int `env:"FINANCING_COMPARISON_RATE_PERCENT" envDefault:"28"`
 }
 
 // Prayer holds the namaz calculation parameters (defaults: Grozny, Shafi'i).

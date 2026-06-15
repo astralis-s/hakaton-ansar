@@ -48,6 +48,12 @@ func TimePtr(ts pgtype.Timestamptz) *time.Time {
 	return &t
 }
 
+// Date wraps a time.Time as a valid pgtype.Date (date-only column).
+func Date(t time.Time) pgtype.Date { return pgtype.Date{Time: t, Valid: true} }
+
+// DateValue returns the time.Time of a pgtype.Date (zero if null).
+func DateValue(d pgtype.Date) time.Time { return d.Time }
+
 // Numeric converts a decimal into pgtype.Numeric (via its canonical string).
 func Numeric(d decimal.Decimal) (pgtype.Numeric, error) {
 	var n pgtype.Numeric

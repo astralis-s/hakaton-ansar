@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/astralis-s/hakaton-ansar/internal/modules/crm/app"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/crm/domain"
 	crmhttp "github.com/astralis-s/hakaton-ansar/internal/modules/crm/http"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/crm/infra"
 )
@@ -21,6 +22,7 @@ type Deps struct {
 // Module is the assembled crm module.
 type Module struct {
 	handler *crmhttp.Handler
+	repo    domain.ClientRepository
 }
 
 // New wires the crm module.
@@ -33,8 +35,11 @@ func New(d Deps) *Module {
 		Update: app.NewUpdateClient(repo),
 		Log:    d.Log,
 	})
-	return &Module{handler: handler}
+	return &Module{handler: handler, repo: repo}
 }
+
+// Clients exposes the client repository for cross-context reads (financing).
+func (m *Module) Clients() domain.ClientRepository { return m.repo }
 
 // RegisterRoutes mounts the crm routes onto a JWT-protected router.
 func (m *Module) RegisterRoutes(r chi.Router) {

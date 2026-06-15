@@ -70,6 +70,10 @@ func (m *Module) JWTMiddleware() func(http.Handler) http.Handler { return m.jwtM
 // APIKeyMiddleware protects the public /api/v1 surface (X-API-Key).
 func (m *Module) APIKeyMiddleware() func(http.Handler) http.Handler { return m.apiKeyMW }
 
+// OwnerMiddleware rejects non-owner principals (403). Other modules use it to
+// gate owner-only actions (e.g. cancel contract, accrue charity).
+func (m *Module) OwnerMiddleware() func(http.Handler) http.Handler { return m.ownerMW }
+
 // RegisterPublicAppRoutes mounts unauthenticated /api/app routes.
 func (m *Module) RegisterPublicAppRoutes(r chi.Router) {
 	r.Post("/auth/login", m.handler.Login)

@@ -18,6 +18,18 @@ type ApiKey struct {
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 }
 
+type CharityEntry struct {
+	ID         pgtype.UUID        `json:"id"`
+	OrgID      pgtype.UUID        `json:"org_id"`
+	ContractID pgtype.UUID        `json:"contract_id"`
+	ClientID   pgtype.UUID        `json:"client_id"`
+	Amount     pgtype.Numeric     `json:"amount"`
+	Status     string             `json:"status"`
+	Note       string             `json:"note"`
+	CreatedBy  pgtype.UUID        `json:"created_by"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type Client struct {
 	ID        pgtype.UUID        `json:"id"`
 	OrgID     pgtype.UUID        `json:"org_id"`
@@ -27,11 +39,46 @@ type Client struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type Contract struct {
+	ID                pgtype.UUID        `json:"id"`
+	OrgID             pgtype.UUID        `json:"org_id"`
+	ClientID          pgtype.UUID        `json:"client_id"`
+	ProductID         pgtype.UUID        `json:"product_id"`
+	CostPrice         pgtype.Numeric     `json:"cost_price"`
+	Markup            pgtype.Numeric     `json:"markup"`
+	SalePrice         pgtype.Numeric     `json:"sale_price"`
+	DownPayment       pgtype.Numeric     `json:"down_payment"`
+	FinancedAmount    pgtype.Numeric     `json:"financed_amount"`
+	Outstanding       pgtype.Numeric     `json:"outstanding"`
+	InstallmentsCount int32              `json:"installments_count"`
+	Cadence           string             `json:"cadence"`
+	Currency          string             `json:"currency"`
+	Status            string             `json:"status"`
+	StartDate         pgtype.Date        `json:"start_date"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type Installment struct {
+	ID         pgtype.UUID    `json:"id"`
+	ContractID pgtype.UUID    `json:"contract_id"`
+	Number     int32          `json:"number"`
+	DueDate    pgtype.Date    `json:"due_date"`
+	Amount     pgtype.Numeric `json:"amount"`
+}
+
 type Organization struct {
 	ID        pgtype.UUID        `json:"id"`
 	Name      string             `json:"name"`
 	Currency  string             `json:"currency"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Payment struct {
+	ID         pgtype.UUID        `json:"id"`
+	ContractID pgtype.UUID        `json:"contract_id"`
+	Amount     pgtype.Numeric     `json:"amount"`
+	PaidAt     pgtype.Timestamptz `json:"paid_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type Product struct {
