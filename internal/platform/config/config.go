@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Env           string `env:"APP_ENV" envDefault:"development"`
 	MigrateOnBoot bool   `env:"MIGRATE_ON_BOOT" envDefault:"true"`
+	SeedOnBoot    bool   `env:"SEED_ON_BOOT" envDefault:"false"`
 
 	HTTP      HTTP
 	DB        DB

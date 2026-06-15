@@ -22,6 +22,7 @@ services:
       HTTP_PORT: "8080"
       DATABASE_URL: postgres://amana:amana@postgres:5432/amana?sslmode=disable
       MIGRATE_ON_BOOT: "true"
+      SEED_ON_BOOT: "true"
       JWT_SECRET: dev-secret-change-me
       LOG_LEVEL: info
       LOG_FORMAT: json

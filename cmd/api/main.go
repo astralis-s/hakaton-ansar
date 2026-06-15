@@ -33,6 +33,7 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/platform/logger"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/web"
 	publicapiv1 "github.com/astralis-s/hakaton-ansar/internal/publicapi/v1"
+	"github.com/astralis-s/hakaton-ansar/internal/seed"
 	"github.com/astralis-s/hakaton-ansar/migrations"
 )
 
@@ -83,6 +84,18 @@ func run() error {
 	}
 	defer pool.Close()
 	log.Info("database connected")
+
+	if cfg.SeedOnBoot {
+		if err := seed.Run(ctx, pool, seed.Config{
+			Lat:      cfg.Prayer.Lat,
+			Lon:      cfg.Prayer.Lon,
+			Madhab:   cfg.Prayer.Madhab,
+			Method:   cfg.Prayer.Method,
+			Timezone: loadTimezone(cfg.Prayer.Timezone, log),
+		}, log); err != nil {
+			return err
+		}
+	}
 
 	// Shared infrastructure.
 	txManager := database.NewTxManager(pool)
