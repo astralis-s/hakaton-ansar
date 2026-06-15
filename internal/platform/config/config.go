@@ -57,12 +57,18 @@ type Financing struct {
 	ComparisonRatePercent int `env:"FINANCING_COMPARISON_RATE_PERCENT" envDefault:"28"`
 }
 
-// Prayer holds the namaz calculation parameters (defaults: Grozny, Shafi'i).
+// Prayer holds the namaz calculation and scheduling parameters (defaults:
+// Grozny, Shafi'i, MWL; 20-minute buffer after each prayer; Jummah 12:30–14:00).
 type Prayer struct {
-	Lat      float64 `env:"PRAYER_LAT" envDefault:"43.3178"`
-	Lon      float64 `env:"PRAYER_LON" envDefault:"45.6949"`
-	Madhab   string  `env:"PRAYER_MADHAB" envDefault:"shafii"`
-	Timezone string  `env:"PRAYER_TIMEZONE" envDefault:"Europe/Moscow"`
+	Lat             float64 `env:"PRAYER_LAT" envDefault:"43.3178"`
+	Lon             float64 `env:"PRAYER_LON" envDefault:"45.6949"`
+	Madhab          string  `env:"PRAYER_MADHAB" envDefault:"shafii"`
+	Timezone        string  `env:"PRAYER_TIMEZONE" envDefault:"Europe/Moscow"`
+	Method          string  `env:"PRAYER_METHOD" envDefault:"MWL"`
+	BufferBeforeMin int     `env:"PRAYER_BUFFER_BEFORE_MIN" envDefault:"0"`
+	BufferAfterMin  int     `env:"PRAYER_BUFFER_AFTER_MIN" envDefault:"20"`
+	JummahStart     string  `env:"PRAYER_JUMMAH_START" envDefault:"12:30"`
+	JummahEnd       string  `env:"PRAYER_JUMMAH_END" envDefault:"14:00"`
 }
 
 // Load reads configuration from the process environment. A local .env file is

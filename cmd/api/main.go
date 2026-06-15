@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
@@ -23,6 +24,9 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/financing"
 	financinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/financing/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/scheduling"
+	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
+	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/config"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/database"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/httpserver"
@@ -102,6 +106,15 @@ func run() error {
 		OwnerOnly:             iamModule.OwnerMiddleware(),
 	})
 
+	prayerLoc := schedulingdomain.Location{Lat: cfg.Prayer.Lat, Lon: cfg.Prayer.Lon, TZ: loadTimezone(cfg.Prayer.Timezone, log)}
+	schedulingModule := scheduling.New(scheduling.Deps{
+		Pool:     pool,
+		Log:      log,
+		Provider: schedulinginfra.NewPrayerProvider(prayerLoc, cfg.Prayer.Madhab, cfg.Prayer.Method),
+		Policy:   prayerPolicy(cfg.Prayer),
+		Location: prayerLoc,
+	})
+
 	srv := httpserver.New(httpserver.Config{
 		Port:               cfg.HTTP.Port,
 		ReadTimeout:        cfg.HTTP.ReadTimeout,
@@ -110,13 +123,41 @@ func run() error {
 		CORSAllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 	}, log)
 
-	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule, financingModule)
+	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule, financingModule, schedulingModule)
 
 	return srv.Run(ctx)
 }
 
+// loadTimezone loads an IANA timezone, falling back to a fixed MSK offset.
+func loadTimezone(name string, log *slog.Logger) *time.Location {
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		log.Warn("failed to load timezone, using MSK (UTC+3)", "timezone", name, "error", err)
+		return time.FixedZone("MSK", 3*60*60)
+	}
+	return loc
+}
+
+// prayerPolicy builds the scheduling policy from config (Jummah HH:MM strings).
+func prayerPolicy(p config.Prayer) schedulingdomain.Policy {
+	parseTOD := func(s string, defH, defM int) schedulingdomain.TimeOfDay {
+		t, err := time.Parse("15:04", s)
+		if err != nil {
+			return schedulingdomain.TimeOfDay{Hour: defH, Minute: defM}
+		}
+		return schedulingdomain.TimeOfDay{Hour: t.Hour(), Minute: t.Minute()}
+	}
+	return schedulingdomain.Policy{
+		BufferBefore:  time.Duration(p.BufferBeforeMin) * time.Minute,
+		BufferAfter:   time.Duration(p.BufferAfterMin) * time.Minute,
+		JummahEnabled: true,
+		JummahStart:   parseTOD(p.JummahStart, 12, 30),
+		JummahEnd:     parseTOD(p.JummahEnd, 14, 0),
+	}
+}
+
 // mountRoutes registers the health check, Swagger UI and the two API surfaces.
-func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module, financingModule *financing.Module) {
+func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module, financingModule *financing.Module, schedulingModule *scheduling.Module) {
 	// Liveness probe — always 200 once the server is up.
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		web.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -137,7 +178,7 @@ func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Mod
 			catalogModule.RegisterRoutes(pr)
 			crmModule.RegisterRoutes(pr)
 			financingModule.RegisterRoutes(pr)
-			// Phase 5+: scheduling mounts here.
+			schedulingModule.RegisterRoutes(pr)
 		})
 	})
 

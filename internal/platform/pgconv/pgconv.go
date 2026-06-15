@@ -31,6 +31,14 @@ func StrUUID(u pgtype.UUID) string {
 	return uuid.UUID(u.Bytes).String()
 }
 
+// NullableUUID converts a string into pgtype.UUID, treating "" as SQL NULL.
+func NullableUUID(s string) (pgtype.UUID, error) {
+	if s == "" {
+		return pgtype.UUID{}, nil
+	}
+	return UUID(s)
+}
+
 // Timestamp wraps a time.Time as a valid pgtype.Timestamptz.
 func Timestamp(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}

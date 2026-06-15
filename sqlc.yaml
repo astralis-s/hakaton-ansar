@@ -42,3 +42,11 @@ sql:
       go:
         <<: *gen
         out: internal/modules/financing/infra/sqlcgen
+  - name: scheduling
+    engine: postgresql
+    schema: migrations
+    queries: internal/modules/scheduling/infra/queries
+    gen:
+      go:
+        <<: *gen
+        out: internal/modules/scheduling/infra/sqlcgen

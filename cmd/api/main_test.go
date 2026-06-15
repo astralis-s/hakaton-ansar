@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -15,6 +16,9 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/financing"
 	financinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/financing/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/scheduling"
+	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
+	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
 )
 
 // newTestRouter builds the real route tree. Modules are constructed with a nil
@@ -39,8 +43,16 @@ func newTestRouter() chi.Router {
 		Clients:               financinginfra.NewClientReader(crmModule.Clients()),
 		OwnerOnly:             iamModule.OwnerMiddleware(),
 	})
+	prayerLoc := schedulingdomain.Location{Lat: 43.3178, Lon: 45.6949, TZ: time.UTC}
+	schedulingModule := scheduling.New(scheduling.Deps{
+		Pool:     nil,
+		Log:      nil,
+		Provider: schedulinginfra.NewPrayerProvider(prayerLoc, "shafii", "MWL"),
+		Policy:   schedulingdomain.DefaultPolicy(),
+		Location: prayerLoc,
+	})
 	r := chi.NewRouter()
-	mountRoutes(r, iamModule, catalogModule, crmModule, financingModule)
+	mountRoutes(r, iamModule, catalogModule, crmModule, financingModule, schedulingModule)
 	return r
 }
 

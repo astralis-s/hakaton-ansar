@@ -91,6 +91,21 @@ type Product struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type Reminder struct {
+	ID              pgtype.UUID        `json:"id"`
+	OrgID           pgtype.UUID        `json:"org_id"`
+	Type            string             `json:"type"`
+	ClientID        pgtype.UUID        `json:"client_id"`
+	ContractID      pgtype.UUID        `json:"contract_id"`
+	Note            string             `json:"note"`
+	DesiredAt       pgtype.Timestamptz `json:"desired_at"`
+	DurationMinutes int32              `json:"duration_minutes"`
+	ScheduledAt     pgtype.Timestamptz `json:"scheduled_at"`
+	WasShifted      bool               `json:"was_shifted"`
+	Reason          string             `json:"reason"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type User struct {
 	ID           pgtype.UUID        `json:"id"`
 	OrgID        pgtype.UUID        `json:"org_id"`
