@@ -162,6 +162,37 @@ func (r *ContractRepository) ListByOrg(ctx context.Context, orgID string) ([]dom
 	return summaries, nil
 }
 
+// ListFullByOrg loads full aggregates (schedule + payments) for the org. It does
+// a per-contract load (acceptable for the dashboard's scale); the aggregation
+// itself lives in the domain.
+func (r *ContractRepository) ListFullByOrg(ctx context.Context, orgID string) ([]*domain.Contract, error) {
+	org, err := pgconv.UUID(orgID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid org id: %w", err)
+	}
+	rows, err := r.q(ctx).ListContractsByOrg(ctx, org)
+	if err != nil {
+		return nil, fmt.Errorf("list contracts: %w", err)
+	}
+	out := make([]*domain.Contract, 0, len(rows))
+	for _, row := range rows {
+		instRows, err := r.q(ctx).ListInstallmentsByContract(ctx, row.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list installments: %w", err)
+		}
+		payRows, err := r.q(ctx).ListPaymentsByContract(ctx, row.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list payments: %w", err)
+		}
+		c, err := contractFromRows(row, instRows, payRows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 func (r *ContractRepository) SaveState(ctx context.Context, c *domain.Contract) error {
 	id, err := pgconv.UUID(c.ID())
 	if err != nil {

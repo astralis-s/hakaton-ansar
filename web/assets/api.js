@@ -59,6 +59,7 @@
     createProduct: function (p) { return request('POST', '/catalog', p); },
     updateProduct: function (id, p) { return request('PUT', '/catalog/' + id, p); },
 
+    dashboard: function () { return request('GET', '/dashboard'); },
     listContracts: function () { return request('GET', '/contracts'); },
     getContract: function (id) { return request('GET', '/contracts/' + id); },
     previewContract: function (p) { return request('POST', '/contracts/preview', p); },

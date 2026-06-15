@@ -54,3 +54,26 @@ func (r *ClientReader) Exists(ctx context.Context, orgID, clientID string) (bool
 	}
 	return true, nil
 }
+
+// Names resolves the requested client ids to their full names with a single
+// org-scoped query.
+func (r *ClientReader) Names(ctx context.Context, orgID string, ids []string) (map[string]string, error) {
+	if len(ids) == 0 {
+		return map[string]string{}, nil
+	}
+	all, err := r.clients.ListByOrg(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]string, len(all))
+	for _, c := range all {
+		byID[c.ID()] = c.FullName()
+	}
+	want := make(map[string]string, len(ids))
+	for _, id := range ids {
+		if name, ok := byID[id]; ok {
+			want[id] = name
+		}
+	}
+	return want, nil
+}

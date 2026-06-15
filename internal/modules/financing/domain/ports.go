@@ -25,6 +25,9 @@ type ContractRepository interface {
 	Create(ctx context.Context, c *Contract) error
 	GetByID(ctx context.Context, orgID, id string) (*Contract, error)
 	ListByOrg(ctx context.Context, orgID string) ([]ContractSummary, error)
+	// ListFullByOrg loads full aggregates (schedule + payments) for the org,
+	// used by the dashboard aggregation.
+	ListFullByOrg(ctx context.Context, orgID string) ([]*Contract, error)
 	// SaveState persists a mutated outstanding balance and status.
 	SaveState(ctx context.Context, c *Contract) error
 	// AddPayment appends one payment row.
@@ -50,9 +53,12 @@ type ProductReader interface {
 	Get(ctx context.Context, orgID, productID string) (ProductInfo, error)
 }
 
-// ClientReader checks client existence in the crm context.
+// ClientReader checks client existence and resolves display names in the crm
+// context.
 type ClientReader interface {
 	Exists(ctx context.Context, orgID, clientID string) (bool, error)
+	// Names resolves client ids to their full names (id → name).
+	Names(ctx context.Context, orgID string, ids []string) (map[string]string, error)
 }
 
 // TxManager runs a function inside a single database transaction (the context

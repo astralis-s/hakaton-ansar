@@ -161,6 +161,18 @@ textarea.input { height:auto; padding:11px 13px; min-height:80px; resize:vertica
 .spinner { width:18px; height:18px; border:2.5px solid var(--surface-3); border-top-color:var(--accent);
   border-radius:99px; animation:amSpin .7s linear infinite; }
 .center-load { display:flex; align-items:center; justify-content:center; gap:10px; padding:60px; color:var(--fg-muted); }
+@keyframes amShimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
+.skeleton { background:linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size:200% 100%; animation:amShimmer 1.3s ease infinite; }
+
+/* dashboard: overdue is the loudest block */
+.overdue-card { border:1.5px solid var(--st-over-bd); background:linear-gradient(180deg, var(--st-over-bg), var(--surface) 70%); }
+.overdue-card .head { display:flex; align-items:center; gap:10px; color:var(--st-over-fg); font-weight:700; }
+.over-row { display:flex; align-items:center; gap:14px; padding:13px 4px; border-bottom:1px solid var(--border); cursor:pointer; border-radius:8px; transition:background-color .14s; }
+.over-row:hover { background:var(--surface-2); }
+.over-row:last-child { border-bottom:none; }
+.days-badge { display:inline-flex; align-items:center; justify-content:center; min-width:60px; padding:5px 10px; border-radius:99px;
+  background:var(--st-over-bg); color:var(--st-over-fg); border:1px solid var(--st-over-bd); font-weight:700; font-size:13px; }
 
 .empty { text-align:center; padding:54px 20px; color:var(--fg-subtle); }
 .empty svg { opacity:.5; margin-bottom:12px; }

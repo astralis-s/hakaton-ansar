@@ -20,17 +20,18 @@ import (
 
 // Handler holds the financing use-cases.
 type Handler struct {
-	preview *app.PreviewContract
-	create  *app.CreateContract
-	get     *app.GetContract
-	list    *app.ListContracts
-	pay     *app.RegisterPayment
-	settle  *app.SettleEarly
-	cancel  *app.CancelContract
-	accrue  *app.AccrueLateCharity
-	charity *app.ListCharity
-	log     *slog.Logger
-	ownerMW func(http.Handler) http.Handler
+	preview   *app.PreviewContract
+	create    *app.CreateContract
+	get       *app.GetContract
+	list      *app.ListContracts
+	pay       *app.RegisterPayment
+	settle    *app.SettleEarly
+	cancel    *app.CancelContract
+	accrue    *app.AccrueLateCharity
+	charity   *app.ListCharity
+	dashboard *app.Dashboard
+	log       *slog.Logger
+	ownerMW   func(http.Handler) http.Handler
 }
 
 // HandlerDeps groups the use-cases for NewHandler.
@@ -44,6 +45,7 @@ type HandlerDeps struct {
 	Cancel      *app.CancelContract
 	Accrue      *app.AccrueLateCharity
 	ListCharity *app.ListCharity
+	Dashboard   *app.Dashboard
 	Log         *slog.Logger
 	OwnerOnly   func(http.Handler) http.Handler
 }
@@ -52,12 +54,13 @@ func NewHandler(d HandlerDeps) *Handler {
 	return &Handler{
 		preview: d.Preview, create: d.Create, get: d.Get, list: d.List,
 		pay: d.Pay, settle: d.Settle, cancel: d.Cancel, accrue: d.Accrue,
-		charity: d.ListCharity, log: d.Log, ownerMW: d.OwnerOnly,
+		charity: d.ListCharity, dashboard: d.Dashboard, log: d.Log, ownerMW: d.OwnerOnly,
 	}
 }
 
 // RegisterRoutes mounts the financing routes (caller provides JWT-protected r).
 func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Get("/dashboard", h.Dashboard) // owner/manager morning view
 	r.Route("/contracts", func(cr chi.Router) {
 		cr.Post("/preview", h.Preview) // static path wins over /{id}
 		cr.Get("/", h.List)
@@ -69,6 +72,17 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		cr.With(h.ownerMW).Post("/{id}/charity", h.AccrueCharity) // owner-only
 	})
 	r.Get("/charity", h.ListCharity) // registry view (both roles)
+}
+
+// Dashboard returns the aggregated owner/manager dashboard.
+func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	res, err := h.dashboard.Execute(r.Context(), p.OrgID)
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusOK, toDashboardResponse(res))
 }
 
 func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {

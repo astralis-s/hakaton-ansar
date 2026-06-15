@@ -56,6 +56,15 @@
 
   function Spinner() { return html`<span class="spinner"></span>`; }
   function Loading(p) { return html`<div class="center-load"><${Spinner}/> ${p.label || 'Загрузка…'}</div>`; }
+  function Skeleton(p) {
+    return html`<div class="skeleton" style=${Object.assign({ height: (p.h || 16) + 'px', width: p.w || '100%', borderRadius: (p.r == null ? 8 : p.r) + 'px' }, p.style)}></div>`;
+  }
+  function BlockError(p) {
+    return html`<div class="banner banner-warn" style=${{ justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style=${{ display: 'flex', gap: 10 }}><${Icon} name="x" size=${17}/><div>${p.message || 'Не удалось загрузить'}</div></div>
+      ${p.onRetry ? html`<button class="btn btn-sm btn-ghost" onClick=${p.onRetry}>Повторить</button>` : null}
+    </div>`;
+  }
 
   var labels = {
     contractStatus: { active: 'Активен', completed: 'Завершён', cancelled: 'Отменён', draft: 'Черновик' },
@@ -105,6 +114,6 @@
     </div>`;
   }
 
-  AM.ui = { React: React, html: html, Icon: Icon, Spinner: Spinner, Loading: Loading, Chip: Chip,
-    StatusChip: StatusChip, Field: Field, Modal: Modal, Empty: Empty, labels: labels };
+  AM.ui = { React: React, html: html, Icon: Icon, Spinner: Spinner, Loading: Loading, Skeleton: Skeleton,
+    BlockError: BlockError, Chip: Chip, StatusChip: StatusChip, Field: Field, Modal: Modal, Empty: Empty, labels: labels };
 })();

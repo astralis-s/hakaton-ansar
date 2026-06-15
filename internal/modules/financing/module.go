@@ -54,6 +54,7 @@ func New(d Deps) *Module {
 		Cancel:      app.NewCancelContract(contracts, d.Tx),
 		Accrue:      app.NewAccrueLateCharity(contracts, charity),
 		ListCharity: app.NewListCharity(charity),
+		Dashboard:   app.NewDashboard(contracts, d.Clients),
 		Log:         d.Log,
 		OwnerOnly:   d.OwnerOnly,
 	})

@@ -33,60 +33,168 @@
     </div>`;
   }
 
-  /* ================= DASHBOARD ================= */
+  /* ================= DASHBOARD =================
+     Priority (visual weight, top→bottom): overdue (names/amounts/days) →
+     this week's expected vs collected (+ collection rate) → today's agenda
+     (namaz-aware) → portfolio balance. Money is computed on the backend
+     (GET /api/app/dashboard) and only displayed here. Per-block loading/error. */
   function Dashboard(ctx) {
-    var contracts = useAsync(api.listContracts);
-    var charity = useAsync(api.listCharity);
-    var reminders = useAsync(api.listReminders);
-    var list = contracts.data || [];
-    var active = list.filter(function (c) { return c.status === 'active'; });
-    var outstanding = active.reduce(function (a, c) { return a + parseFloat(c.outstanding || 0); }, 0);
-    var totalCharity = (charity.data && charity.data.total_amount) || '0';
-    var shifted = (reminders.data || []).filter(function (r) { return r.was_shifted; });
+    var dash = useAsync(api.dashboard);     // overdue + week + portfolio (one source)
+    var rem = useAsync(api.listReminders);  // today's agenda (separate source)
+    var qp = useState(false), quickPay = qp[0], setQuickPay = qp[1];
+    var cm = useState(false), clientOpen = cm[0], setClientOpen = cm[1];
 
-    var kpis = [
-      { v: active.length, l: 'Активные договоры', ico: 'contracts' },
-      { v: fmt.money(String(outstanding)), l: 'Остаток к получению', ico: 'coins' },
-      { v: fmt.money(totalCharity), l: 'Собрано садаки', ico: 'charity' },
-      { v: (reminders.data || []).length, l: 'Напоминаний', ico: 'calendar' },
-    ];
+    var head = html`<${PageHead} title="Дашборд" sub="Что горит, что делать сегодня и сколько придёт"
+      actions=${html`<button class="btn btn-primary" onClick=${function () { ctx.go('contract-new'); }}><${Icon} name="plus" size=${17}/> Новый договор</button>`}/>`;
+
+    if (dash.loading && !dash.data) {
+      return html`<div>${head}
+        <div class="grid" style=${{ gap: 16 }}>
+          <div class="card card-pad"><${ui.Skeleton} h=${22} w="40%"/><div style=${{ height: 12 }}></div>
+            <${ui.Skeleton} h=${48} style=${{ marginBottom: 10 }}/><${ui.Skeleton} h=${48}/></div>
+          <div class="grid" style=${{ gridTemplateColumns: '1.5fr 1fr' }}>
+            <div class="card card-pad"><${ui.Skeleton} h=${22} w="50%"/><div style=${{ height: 14 }}></div><${ui.Skeleton} h=${60}/></div>
+            <div class="card card-pad"><${ui.Skeleton} h=${40} w="70%"/><div style=${{ height: 14 }}></div><${ui.Skeleton} h=${40}/></div>
+          </div>
+        </div></div>`;
+    }
+
+    var d = dash.data;
+    var emptyOrg = d && d.portfolio.active_contracts === 0 && d.overdue.length === 0 && d.week.upcoming.length === 0;
+    if (emptyOrg) {
+      return html`<div>${head}
+        <div class="card" style=${{ padding: '20px' }}>
+          <${ui.Empty} icon="contracts" title="Добро пожаловать в «Аману»"
+            text="Здесь появятся просрочки, поток платежей и задачи на день. Начните с клиента и первого договора."
+            action=${html`<div style=${{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
+              <button class="btn btn-ghost" onClick=${function () { setClientOpen(true); }}><${Icon} name="clients" size=${17}/> Новый клиент</button>
+              <button class="btn btn-primary" onClick=${function () { ctx.go('contract-new'); }}><${Icon} name="plus" size=${17}/> Новый договор</button>
+            </div>`}/>
+        </div>
+        ${clientOpen ? html`<${ClientModal} ctx=${ctx} onClose=${function () { setClientOpen(false); }} onSaved=${function () { setClientOpen(false); ctx.toast('Клиент добавлен'); }}/>` : null}
+      </div>`;
+    }
+
     return html`<div>
-      <${PageHead} title="Дашборд" sub="Общая картина бизнеса"
-        actions=${html`<button class="btn btn-primary" onClick=${function () { ctx.go('contract-new'); }}><${Icon} name="plus" size=${17}/> Новый договор</button>`}/>
-      <${Guard} loading=${contracts.loading} err=${contracts.err}>
-        <div class="grid" style=${{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-          ${kpis.map(function (k, i) {
-            return html`<div key=${i} class="card card-pad" style=${{ animation: 'amRise .5s ease both ' + (i * 0.05) + 's' }}>
-              <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div class="kpi"><div class="v amana-num">${k.v}</div><div class="l">${k.l}</div></div>
-                <span style=${{ width: 40, height: 40, borderRadius: 12, background: 'var(--grad-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><${Icon} name=${k.ico} size=${20}/></span>
-              </div></div>`;
-          })}
-        </div>
-        <div class="grid" style=${{ gridTemplateColumns: '1.4fr 1fr', marginTop: 16 }}>
-          <div class="card card-pad">
-            <div style=${{ fontWeight: 700, marginBottom: 12 }}>Последние договоры</div>
-            ${list.length === 0 ? html`<${ui.Empty} icon="contracts" title="Договоров пока нет" text="Оформите первый договор рассрочки"/>`
-              : html`<table class="table"><tbody>${list.slice(0, 6).map(function (c) {
-                return html`<tr key=${c.id} class="row-link" onClick=${function () { ctx.go('contract', c.id); }}>
-                  <td><div style=${{ fontWeight: 600 }} class="amana-num">${fmt.money(c.sale_price)}</div>
-                    <div style=${{ fontSize: 12.5, color: 'var(--fg-subtle)' }}>остаток ${fmt.money(c.outstanding)}</div></td>
-                  <td style=${{ width: 130 }}><div class="progress"><i style=${{ width: (c.progress_percent || 0) + '%' }}></i></div></td>
-                  <td style=${{ width: 110, textAlign: 'right' }}><${ui.StatusChip} map="contractStatus" value=${c.status}/></td></tr>`;
-              })}</tbody></table>`}
-          </div>
-          <div class="card card-pad">
-            <div style=${{ fontWeight: 700, marginBottom: 12 }}>Перенесено мимо намаза</div>
-            ${shifted.length === 0 ? html`<${ui.Empty} icon="calendar" title="Нет переносов" text="Задачи вне окон молитв"/>`
-              : shifted.slice(0, 4).map(function (r) {
-                return html`<div key=${r.id} style=${{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                  <div style=${{ fontWeight: 600, fontSize: 14 }}>${ui.labels.reminderType[r.type] || r.type}</div>
-                  <div style=${{ fontSize: 12.5, color: 'var(--st-part-fg)' }}>${r.reason || 'перенесено'}</div></div>`;
+      ${head}
+
+      <!-- 1. OVERDUE — loudest -->
+      ${dash.err ? html`<${ui.BlockError} message=${'Не удалось загрузить сводку: ' + dash.err} onRetry=${dash.reload}/>`
+        : (d && d.overdue.length > 0
+          ? html`<div class="card card-pad overdue-card" style=${{ marginBottom: 16 }}>
+              <div class="head" style=${{ marginBottom: 12 }}><${Icon} name="clock" size=${19}/> Требуют внимания — просрочка
+                <span style=${{ marginLeft: 'auto', fontSize: 13, fontWeight: 600, color: 'var(--st-over-fg)' }}>${d.overdue.length}</span></div>
+              ${d.overdue.map(function (o) {
+                return html`<div key=${o.contract_id} class="over-row" tabindex="0" role="button"
+                  onClick=${function () { ctx.go('contract', o.contract_id); }}
+                  onKeyDown=${function (e) { if (e.key === 'Enter') ctx.go('contract', o.contract_id); }}>
+                  <div style=${{ flex: 1, minWidth: 0 }}>
+                    <div style=${{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>${o.client_name || 'Клиент'}</div>
+                    <div style=${{ fontSize: 12.5, color: 'var(--fg-subtle)' }}>к получению</div>
+                  </div>
+                  <div class="amana-num" style=${{ fontWeight: 700, fontSize: 15.5 }}>${fmt.money(o.outstanding)}</div>
+                  <span class="days-badge amana-num">${o.days_overdue} дн.</span>
+                  <${Icon} name="arrow" size=${17} style=${{ color: 'var(--fg-subtle)' }}/>
+                </div>`;
               })}
+            </div>`
+          : html`<div class="banner banner-accent" style=${{ marginBottom: 16 }}><${Icon} name="check" size=${18}/> Просрочек нет — все платежи в графике.</div>`)}
+
+      <!-- 2. THIS WEEK + 4. PORTFOLIO / quick actions -->
+      ${dash.err ? null : html`<div class="grid" style=${{ gridTemplateColumns: '1.5fr 1fr', marginBottom: 16 }}>
+        <div class="card card-pad">
+          <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6 }}>
+            <div style=${{ fontWeight: 700 }}>К получению на этой неделе</div>
+            <div class="amana-num" style=${{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>${weekRate(d)}% собрано</div>
+          </div>
+          <div class="amana-num" style=${{ fontSize: 27, fontWeight: 700, letterSpacing: '-.02em' }}>${fmt.money(d.week.expected)}</div>
+          <div style=${{ color: 'var(--fg-muted)', fontSize: 13.5, marginBottom: 12 }}>получено <b class="amana-num" style=${{ color: 'var(--fg)' }}>${fmt.money(d.week.collected)}</b></div>
+          <div class="progress" style=${{ height: 9, marginBottom: 16 }}><i style=${{ width: weekRate(d) + '%' }}></i></div>
+          ${d.week.upcoming.length === 0
+            ? html`<div style=${{ fontSize: 13.5, color: 'var(--fg-subtle)' }}>На ближайшие дни платежей не запланировано.</div>`
+            : html`<div>${d.week.upcoming.map(function (u) {
+                return html`<div key=${u.contract_id + u.due_date} class="timeline-row row-link" onClick=${function () { ctx.go('contract', u.contract_id); }}>
+                  <div style=${{ flex: 1, minWidth: 0 }}><div style=${{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>${u.client_name || 'Клиент'}</div>
+                    <div style=${{ fontSize: 12.5, color: 'var(--fg-subtle)' }}>${fmt.date(u.due_date)}</div></div>
+                  <div class="amana-num" style=${{ fontWeight: 600, marginRight: 10 }}>${fmt.money(u.amount)}</div>
+                  <${ui.StatusChip} map="installmentStatus" value=${u.status}/></div>`;
+              })}</div>`}
+        </div>
+        <div>
+          <div class="card card-pad" style=${{ marginBottom: 16 }}>
+            <div style=${{ fontSize: 13, color: 'var(--fg-subtle)', marginBottom: 4 }}>Портфель · к получению</div>
+            <div class="amana-num" style=${{ fontSize: 30, fontWeight: 700, letterSpacing: '-.02em' }}>${fmt.money(d.portfolio.outstanding)}</div>
+            <div style=${{ color: 'var(--fg-muted)', fontSize: 13.5, marginTop: 4 }}>${d.portfolio.active_contracts} ${plural(d.portfolio.active_contracts, 'активный договор', 'активных договора', 'активных договоров')}</div>
+          </div>
+          <div class="card card-pad">
+            <div style=${{ fontWeight: 700, marginBottom: 12 }}>Быстрые действия</div>
+            <div style=${{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <button class="btn btn-primary btn-block" onClick=${function () { ctx.go('contract-new'); }}><${Icon} name="plus" size=${17}/> Новый договор</button>
+              <button class="btn btn-ghost btn-block" onClick=${function () { setClientOpen(true); }}><${Icon} name="clients" size=${17}/> Новый клиент</button>
+              <button class="btn btn-ghost btn-block" onClick=${function () { setQuickPay(true); }}><${Icon} name="coins" size=${17}/> Принять платёж</button>
+            </div>
           </div>
         </div>
-      <//>
+      </div>`}
+
+      <!-- 3. TODAY'S AGENDA (namaz-aware) -->
+      <div class="card card-pad">
+        <div style=${{ fontWeight: 700, marginBottom: 12 }}>Повестка на сегодня</div>
+        ${rem.loading ? html`<${ui.Skeleton} h=${52} style=${{ marginBottom: 8 }}/>`
+          : rem.err ? html`<${ui.BlockError} message="Не удалось загрузить задачи" onRetry=${rem.reload}/>`
+          : (function () {
+            var agenda = (rem.data || []).filter(function (r) { return isToday(r.scheduled_at); });
+            if (agenda.length === 0) return html`<div style=${{ fontSize: 13.5, color: 'var(--fg-subtle)' }}>На сегодня задач нет.</div>`;
+            return html`<div>${agenda.map(function (r) {
+              return html`<div key=${r.id} class="timeline-row">
+                <span style=${{ width: 38, height: 38, borderRadius: 11, background: 'var(--grad-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <${Icon} name=${r.type === 'delivery' ? 'truck' : r.type === 'call' ? 'phone' : 'coins'} size=${18}/></span>
+                <div style=${{ flex: 1, minWidth: 0 }}>
+                  <div style=${{ fontWeight: 600 }}>${ui.labels.reminderType[r.type] || r.type}${r.note ? html`<span style=${{ color: 'var(--fg-subtle)', fontWeight: 400 }}> · ${r.note}</span>` : null}</div>
+                  ${r.was_shifted ? html`<div style=${{ fontSize: 12.5, color: 'var(--st-part-fg)' }}>перенесено из-за намаза — ${r.reason}</div>` : null}
+                </div>
+                <div class="amana-num" style=${{ fontWeight: 600, color: 'var(--fg-muted)' }}>${fmt.time(r.scheduled_at)}</div>
+                ${r.was_shifted ? html`<span class="chip chip-partially_paid">перенесено</span>` : null}
+              </div>`;
+            })}</div>`;
+          })()}
+      </div>
+
+      ${quickPay ? html`<${QuickPay} ctx=${ctx} onClose=${function () { setQuickPay(false); }} onDone=${function () { setQuickPay(false); dash.reload(); ctx.toast('Платёж принят'); }}/>` : null}
+      ${clientOpen ? html`<${ClientModal} ctx=${ctx} onClose=${function () { setClientOpen(false); }} onSaved=${function () { setClientOpen(false); ctx.toast('Клиент добавлен'); }}/>` : null}
     </div>`;
+  }
+
+  function weekRate(d) {
+    var r = parseFloat((d && d.week && d.week.collection_rate_percent) || '0') || 0;
+    return Math.max(0, Math.min(100, Math.round(r)));
+  }
+  function isToday(iso) {
+    var d = new Date(iso), n = new Date();
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  }
+  function plural(n, one, few, many) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
+  }
+  function QuickPay(p) {
+    var st = useAsync(api.listContracts);
+    var s = useState(null), selected = s[0], setSel = s[1];
+    if (selected) return html`<${PaymentModal} c=${selected} ctx=${p.ctx} onClose=${p.onClose} onDone=${p.onDone}/>`;
+    var active = (st.data || []).filter(function (c) { return c.status === 'active'; });
+    return html`<${ui.Modal} title="Принять платёж — выберите договор" onClose=${p.onClose} width=${460}>
+      <${Guard} loading=${st.loading} err=${st.err}>
+        ${active.length === 0 ? html`<${ui.Empty} icon="contracts" title="Нет активных договоров"/>`
+          : html`<div style=${{ display: 'flex', flexDirection: 'column', gap: 8 }}>${active.map(function (c) {
+            return html`<div key=${c.id} class="select-card" onClick=${function () { setSel({ id: c.id, outstanding: c.outstanding }); }}>
+              <div style=${{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span class="amana-num" style=${{ fontWeight: 600 }}>${fmt.money(c.sale_price)}</span>
+                <span class="amana-num" style=${{ color: 'var(--fg-muted)' }}>остаток ${fmt.money(c.outstanding)}</span></div></div>`;
+          })}</div>`}
+      <//>
+    <//>`;
   }
 
   /* ================= CLIENTS ================= */
