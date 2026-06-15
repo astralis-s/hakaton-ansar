@@ -1,0 +1,18 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Amana Public API",
+    "description": "Публичный API CRM «Амана» — рассрочка по модели мурабаха (без рибы). Авторизация по заголовку X-API-Key. Внутренний API приложения (/api/app, JWT) здесь не документируется. Полный набор эндпоинтов появится в Фазе 6.",
+    "version": "0.1.0"
+  },
+  "basePath": "/api/v1",
+  "schemes": ["http"],
+  "securityDefinitions": {
+    "ApiKeyAuth": {
+      "type": "apiKey",
+      "name": "X-API-Key",
+      "in": "header"
+    }
+  },
+  "paths": {}
+}
