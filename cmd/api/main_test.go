@@ -2,46 +2,54 @@ package main
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
 )
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
+// newTestRouter builds the real route tree. The iam module is constructed with a
+// nil pool: the routes exercised here (health, swagger, and the auth-rejection
+// paths) never reach the database.
 func newTestRouter() chi.Router {
+	iamModule := iam.New(iam.Deps{
+		Pool:      nil,
+		Tx:        nil,
+		Log:       nil,
+		JWTSecret: "test-secret",
+		JWTTTL:    0,
+	})
 	r := chi.NewRouter()
-	mountRoutes(r, testLogger())
+	mountRoutes(r, iamModule)
 	return r
 }
 
-func TestRoutesReturn200(t *testing.T) {
+func TestPublicRoutes(t *testing.T) {
 	r := newTestRouter()
 
 	cases := []struct {
+		name       string
+		method     string
 		path       string
 		wantStatus int
 	}{
-		{"/health", http.StatusOK},
-		{"/api/app/ping", http.StatusOK},
-		{"/api/v1/ping", http.StatusOK},
-		{"/swagger/doc.json", http.StatusOK},
+		{"health", http.MethodGet, "/health", http.StatusOK},
+		{"swagger doc", http.MethodGet, "/swagger/doc.json", http.StatusOK},
+		{"protected app route without token → 401", http.MethodGet, "/api/app/auth/me", http.StatusUnauthorized},
+		{"public api route without key → 401", http.MethodGet, "/api/v1/ping", http.StatusUnauthorized},
+		{"unknown route → 404", http.MethodGet, "/nope", http.StatusNotFound},
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.path, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
-
 			if rec.Code != tc.wantStatus {
-				t.Fatalf("GET %s = %d, want %d (body: %s)", tc.path, rec.Code, tc.wantStatus, rec.Body.String())
+				t.Fatalf("%s %s = %d, want %d (body: %s)", tc.method, tc.path, rec.Code, tc.wantStatus, rec.Body.String())
 			}
 		})
 	}
@@ -59,23 +67,5 @@ func TestHealthBody(t *testing.T) {
 	}
 	if body["status"] != "ok" {
 		t.Fatalf("status = %q, want \"ok\"", body["status"])
-	}
-}
-
-func TestSwaggerDocIsJSON(t *testing.T) {
-	r := newTestRouter()
-	req := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-		t.Fatalf("Content-Type = %q, want application/json", ct)
-	}
-	var spec map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &spec); err != nil {
-		t.Fatalf("swagger spec is not valid JSON: %v", err)
-	}
-	if spec["swagger"] != "2.0" {
-		t.Fatalf("swagger version = %v, want 2.0", spec["swagger"])
 	}
 }

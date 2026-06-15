@@ -17,10 +17,12 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/astralis-s/hakaton-ansar/api/openapi"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/config"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/database"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/httpserver"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/logger"
+	"github.com/astralis-s/hakaton-ansar/internal/platform/web"
 	"github.com/astralis-s/hakaton-ansar/migrations"
 )
 
@@ -72,6 +74,18 @@ func run() error {
 	defer pool.Close()
 	log.Info("database connected")
 
+	// Shared infrastructure.
+	txManager := database.NewTxManager(pool)
+
+	// Modules.
+	iamModule := iam.New(iam.Deps{
+		Pool:      pool,
+		Tx:        txManager,
+		Log:       log,
+		JWTSecret: cfg.Auth.JWTSecret,
+		JWTTTL:    cfg.Auth.JWTTTL,
+	})
+
 	srv := httpserver.New(httpserver.Config{
 		Port:               cfg.HTTP.Port,
 		ReadTimeout:        cfg.HTTP.ReadTimeout,
@@ -80,36 +94,39 @@ func run() error {
 		CORSAllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 	}, log)
 
-	mountRoutes(srv.Router(), log)
+	mountRoutes(srv.Router(), iamModule)
 
 	return srv.Run(ctx)
 }
 
 // mountRoutes registers the health check, Swagger UI and the two API surfaces.
-// Modules attach their own routes here in later phases.
-func mountRoutes(r chi.Router, log *slog.Logger) {
+func mountRoutes(r chi.Router, iamModule *iam.Module) {
 	// Liveness probe — always 200 once the server is up.
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-		httpserver.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		web.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
 	// Swagger UI for the public API.
 	httpserver.MountSwagger(r, openapi.SpecJSON)
 
-	// Internal application API (SPA) — JWT (stubbed in Phase 1).
-	r.Route("/api/app", func(r chi.Router) {
-		r.Use(httpserver.StubBearerAuth(log))
-		r.Get("/ping", func(w http.ResponseWriter, _ *http.Request) {
-			httpserver.WriteJSON(w, http.StatusOK, map[string]string{"surface": "app", "status": "ok"})
+	// Internal application API (SPA) — JWT.
+	r.Route("/api/app", func(ar chi.Router) {
+		// Public: login + first-run setup.
+		iamModule.RegisterPublicAppRoutes(ar)
+
+		// Protected: everything else lives behind JWT auth.
+		ar.Group(func(pr chi.Router) {
+			pr.Use(iamModule.JWTMiddleware())
+			iamModule.RegisterProtectedAppRoutes(pr)
+			// Phase 3+: catalog, crm, financing, scheduling mount here.
 		})
-		// Phase 2+: iam, catalog, crm, financing, scheduling mount here.
 	})
 
-	// Public API (+3) — X-API-Key (stubbed in Phase 1).
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(httpserver.StubAPIKeyAuth(log))
-		r.Get("/ping", func(w http.ResponseWriter, _ *http.Request) {
-			httpserver.WriteJSON(w, http.StatusOK, map[string]string{"surface": "v1", "status": "ok"})
+	// Public API (+3) — X-API-Key.
+	r.Route("/api/v1", func(vr chi.Router) {
+		vr.Use(iamModule.APIKeyMiddleware())
+		vr.Get("/ping", func(w http.ResponseWriter, _ *http.Request) {
+			web.JSON(w, http.StatusOK, map[string]string{"surface": "v1", "status": "ok"})
 		})
 		// Phase 6: publicapi mounts here.
 	})

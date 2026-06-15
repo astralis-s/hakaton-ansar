@@ -160,3 +160,14 @@
 - **Инфра**: multi-stage `Dockerfile` → distroless; `docker-compose.yml` (app + postgres:16, healthcheck + `depends_on`); `Makefile` (run/build/test/migrate/sqlc/swag/lint/docker-*); `sqlc.yaml` (схема = миграции, генерация по пакету на модуль); `.env.example`; baseline-миграция `00001_init` (расширение `pgcrypto`).
 - **Тесты**: table-driven на маршруты (`/health`, обе поверхности, `/swagger/doc.json`) и на маппинг ошибок `apperror` — зелёные.
 - **Проверка рантайма**: против реального PostgreSQL 16 — миграции применились на старте (`goose … successfully migrated database to version: 1`), `/health = 200`, обе поверхности и Swagger UI отвечают. (`docker compose up` в песочнице без запущенного docker-демона не прогонялся; `Dockerfile`/`compose` написаны и валидны.)
+
+### Фаза 2 — IAM ✅
+Модуль `internal/modules/iam` строго по skill `new-module` (domain → app → infra → http).
+- **domain** (стерилен, только stdlib): `Organization`, `User` (email через `net/mail`), `ApiKey` (+ `HashAPIKey` на sha256), VO `Role` (`RoleOwner`/`RoleManager`, без «admin»); конструкторы валидируют инварианты; порты `OrganizationRepository`/`UserRepository`/`ApiKeyRepository`, `PasswordHasher`, `TokenService`, `TxManager`, тип `Principal`.
+- **infra**: sqlc-репозитории (генерация `make sqlc`), `BcryptHasher` (bcrypt), `JWTService` (golang-jwt/v5, HS256), маппинг `pgtype`↔домен, перевод unique-violation → `ErrEmailTaken`.
+- **app**: `SetupOrganization` (создание орг+владельца атомарно в транзакции, повторно — `ErrAlreadyInitialized`), `Login` (без раскрытия существования email), `CreateUser`/`ListUsers`/`GetUser`, `CreateApiKey` (секрет один раз)/`ListApiKeys`/`RevokeApiKey`, `AuthenticateApiKey`.
+- **http**: реальные middleware **JWT** (`/api/app`) и **X-API-Key** (`/api/v1`), `RequireOwner` (owner-only), DTO+validator, централизованный маппинг ошибок в HTTP. Заглушки auth из Фазы 1 удалены.
+- **platform**: рефактор `database` на транзакции-через-контекст + `TxManager` + аксессор `Querier` (совместим с sqlc `DBTX`); новые `platform/authctx` (principal в контексте, без связности с модулем) и `platform/web` (decode+validate→apperror, JSON). Установлены CLI `sqlc`/`swag`.
+- **Миграция** `00002_iam` (organizations, users, api_keys; FK, unique email/hash, индексы).
+- **Тесты**: table-driven доменные (Role, конструкторы User/Org/ApiKey + невалидные кейсы, детерминизм `HashAPIKey`) и `Login` на фейках (успех / неизвестный email / неверный пароль) — зелёные.
+- **Проверка рантайма** (реальный PG 16, сквозной флоу): setup→201, повтор→409, login→JWT, `/auth/me` 200/401, владелец создаёт менеджера→201, дубль email→409, выпуск API-ключа (секрет один раз), `/api/v1/ping` по `X-API-Key` 200, неверный/без ключа→401, **менеджер на owner-only→403**, неверный пароль→401.

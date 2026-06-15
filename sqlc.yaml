@@ -2,7 +2,7 @@
 #
 # One shared schema (the goose migrations) feeds every module; each bounded
 # context keeps its own queries and generated package under its infra/ folder.
-# Entries are activated as modules are implemented (Phases 2-4). Run: `make sqlc`.
+# A new block is added as each module is implemented (Phases 2-5). Run: `make sqlc`.
 version: "2"
 sql:
   - name: iam
@@ -10,7 +10,7 @@ sql:
     schema: migrations
     queries: internal/modules/iam/infra/queries
     gen:
-      go: &gen
+      go:
         package: sqlcgen
         out: internal/modules/iam/infra/sqlcgen
         sql_package: pgx/v5
@@ -18,35 +18,3 @@ sql:
         emit_interface: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
-  - name: catalog
-    engine: postgresql
-    schema: migrations
-    queries: internal/modules/catalog/infra/queries
-    gen:
-      go:
-        <<: *gen
-        out: internal/modules/catalog/infra/sqlcgen
-  - name: crm
-    engine: postgresql
-    schema: migrations
-    queries: internal/modules/crm/infra/queries
-    gen:
-      go:
-        <<: *gen
-        out: internal/modules/crm/infra/sqlcgen
-  - name: financing
-    engine: postgresql
-    schema: migrations
-    queries: internal/modules/financing/infra/queries
-    gen:
-      go:
-        <<: *gen
-        out: internal/modules/financing/infra/sqlcgen
-  - name: scheduling
-    engine: postgresql
-    schema: migrations
-    queries: internal/modules/scheduling/infra/queries
-    gen:
-      go:
-        <<: *gen
-        out: internal/modules/scheduling/infra/sqlcgen
