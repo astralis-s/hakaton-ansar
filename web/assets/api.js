@@ -140,6 +140,7 @@
     },
     me: function () { return portalRequest('GET', '/me'); },
     contracts: function () { return portalRequest('GET', '/contracts'); },
+    contract: function (id) { return portalRequest('GET', '/contracts/' + id); },
     messages: function () { return portalRequest('GET', '/messages'); },
     send: function (body) { return portalRequest('POST', '/messages', { body: body }); },
   };

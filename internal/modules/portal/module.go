@@ -50,6 +50,7 @@ func New(d Deps) *Module {
 		Thread:    app.NewGetThread(chat),
 		Profile:   app.NewGetClientProfile(d.Clients),
 		Contracts: app.NewGetClientContracts(d.Contracts),
+		Contract:  app.NewGetClientContract(d.Contracts),
 		Log:       d.Log,
 	})
 	return &Module{handler: handler, clientMW: portalhttp.ClientAuth(tokens, d.Log)}

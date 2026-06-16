@@ -96,3 +96,75 @@ func toContractViewResponse(c domain.ContractView) contractViewResponse {
 		CreatedAt:    c.CreatedAt,
 	}
 }
+
+const dateLayout = "2006-01-02"
+
+type installmentLineResponse struct {
+	Number  int    `json:"number"`
+	DueDate string `json:"due_date"`
+	Amount  string `json:"amount"`
+	Status  string `json:"status"`
+}
+
+type paymentLineResponse struct {
+	Amount string    `json:"amount"`
+	PaidAt time.Time `json:"paid_at"`
+}
+
+type contractDetailResponse struct {
+	ID             string                    `json:"id"`
+	ProductID      string                    `json:"product_id"`
+	SalePrice      string                    `json:"sale_price"`
+	DownPayment    string                    `json:"down_payment"`
+	FinancedAmount string                    `json:"financed_amount"`
+	Outstanding    string                    `json:"outstanding"`
+	PaidAmount     string                    `json:"paid_amount"`
+	Status         string                    `json:"status"`
+	Cadence        string                    `json:"cadence"`
+	StartDate      string                    `json:"start_date"`
+	HasOverdue     bool                      `json:"has_overdue"`
+	HasNext        bool                      `json:"has_next"`
+	NextDueDate    string                    `json:"next_due_date"`
+	NextDueAmount  string                    `json:"next_due_amount"`
+	Schedule       []installmentLineResponse `json:"schedule"`
+	Payments       []paymentLineResponse     `json:"payments"`
+	CreatedAt      time.Time                 `json:"created_at"`
+}
+
+func toContractDetailResponse(d domain.ContractDetail) contractDetailResponse {
+	schedule := make([]installmentLineResponse, 0, len(d.Installments))
+	for _, l := range d.Installments {
+		schedule = append(schedule, installmentLineResponse{
+			Number:  l.Number,
+			DueDate: l.DueDate.Format(dateLayout),
+			Amount:  l.Amount.String(),
+			Status:  l.Status,
+		})
+	}
+	payments := make([]paymentLineResponse, 0, len(d.Payments))
+	for _, p := range d.Payments {
+		payments = append(payments, paymentLineResponse{Amount: p.Amount.String(), PaidAt: p.PaidAt})
+	}
+	resp := contractDetailResponse{
+		ID:             d.ID,
+		ProductID:      d.ProductID,
+		SalePrice:      d.SalePrice.String(),
+		DownPayment:    d.DownPayment.String(),
+		FinancedAmount: d.FinancedAmount.String(),
+		Outstanding:    d.Outstanding.String(),
+		PaidAmount:     d.PaidAmount.String(),
+		Status:         d.Status,
+		Cadence:        d.Cadence,
+		StartDate:      d.StartDate.Format(dateLayout),
+		HasOverdue:     d.HasOverdue,
+		HasNext:        d.HasNext,
+		Schedule:       schedule,
+		Payments:       payments,
+		CreatedAt:      d.CreatedAt,
+	}
+	if d.HasNext {
+		resp.NextDueDate = d.NextDueDate.Format(dateLayout)
+		resp.NextDueAmount = d.NextDueAmount.String()
+	}
+	return resp
+}

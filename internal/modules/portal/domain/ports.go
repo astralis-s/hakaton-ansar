@@ -76,10 +76,50 @@ type ContractView struct {
 	CreatedAt    time.Time
 }
 
+// InstallmentLine is one row of the client's payment schedule: how much is due,
+// when, and whether it is paid / pending / overdue.
+type InstallmentLine struct {
+	Number  int
+	DueDate time.Time
+	Amount  money.Money
+	Status  string // pending | partially_paid | paid | overdue
+}
+
+// PaymentLine is one payment the client has already made.
+type PaymentLine struct {
+	Amount money.Money
+	PaidAt time.Time
+}
+
+// ContractDetail is the full client-facing view of one contract: the headline
+// figures, the payment schedule (сколько и когда платить) and the payment
+// history. It deliberately omits cost price / markup (the merchant's margin).
+type ContractDetail struct {
+	ID             string
+	ProductID      string
+	SalePrice      money.Money
+	DownPayment    money.Money
+	FinancedAmount money.Money
+	Outstanding    money.Money
+	PaidAmount     money.Money
+	Status         string
+	Cadence        string
+	StartDate      time.Time
+	HasOverdue     bool
+	HasNext        bool
+	NextDueDate    time.Time
+	NextDueAmount  money.Money
+	Installments   []InstallmentLine
+	Payments       []PaymentLine
+	CreatedAt      time.Time
+}
+
 // ContractReader reads a client's own contracts from the financing context (for
-// the portal "my installments" view).
+// the portal "my installments" views). GetForClient returns ErrContractNotFound
+// both when the contract is absent and when it belongs to another client.
 type ContractReader interface {
 	ListForClient(ctx context.Context, orgID, clientID string) ([]ContractView, error)
+	GetForClient(ctx context.Context, orgID, clientID, contractID string) (ContractDetail, error)
 }
 
 // TxManager runs a function inside a single database transaction.

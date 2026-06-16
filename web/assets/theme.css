@@ -1170,6 +1170,16 @@ textarea.input { height:auto; padding:11px 13px; min-height:80px; resize:vertica
 .portal-tabs { display:flex; gap:6px; padding:14px 22px 0; max-width:820px; margin:0 auto; width:100%; }
 .portal-main { max-width:820px; margin:0 auto; width:100%; padding:16px 22px 40px; flex:1; }
 .portal-chat-card { padding:0; overflow:hidden; height:64vh; display:flex; flex-direction:column; }
+.portal-contract-card { display:block; width:100%; text-align:left; cursor:pointer; border:1px solid var(--border); transition:border-color .15s, box-shadow .15s, transform .05s; }
+.portal-contract-card:hover { border-color:var(--accent-bd); box-shadow:var(--shadow); }
+.portal-contract-card:active { transform:translateY(1px); }
+.portal-open-link { display:flex; align-items:center; gap:5px; margin-top:12px; color:var(--accent); font-size:13px; font-weight:600; }
+.portal-next { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:14px; padding:14px 16px; border-radius:14px; background:var(--accent-soft); border:1px solid var(--accent-bd); }
+.portal-next-label { font-size:12px; color:var(--fg-muted); }
+.portal-next-amt { font-size:22px; font-weight:700; letter-spacing:-.02em; color:var(--accent); }
+.portal-next-date { font-weight:600; font-size:13.5px; text-align:right; }
+.portal-progress-row { display:flex; align-items:center; gap:10px; }
+.row-overdue { background:var(--haram-bg); }
 
 @media (max-width:760px) {
   .chat-layout { grid-template-columns:1fr; }

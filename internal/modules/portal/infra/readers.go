@@ -3,6 +3,7 @@ package infra
 import (
 	"context"
 	"errors"
+	"time"
 
 	crmdomain "github.com/astralis-s/hakaton-ansar/internal/modules/crm/domain"
 	financingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/financing/domain"
@@ -85,4 +86,57 @@ func (r *ContractReader) ListForClient(ctx context.Context, orgID, clientID stri
 		})
 	}
 	return out, nil
+}
+
+func (r *ContractReader) GetForClient(ctx context.Context, orgID, clientID, contractID string) (domain.ContractDetail, error) {
+	c, err := r.contracts.GetByID(ctx, orgID, contractID)
+	if err != nil {
+		if errors.Is(err, financingdomain.ErrContractNotFound) {
+			return domain.ContractDetail{}, domain.ErrContractNotFound
+		}
+		return domain.ContractDetail{}, err
+	}
+	// Authorization: a client may only see their own contract; otherwise behave
+	// as if it does not exist (do not leak other clients' contract ids).
+	if c.ClientID() != clientID {
+		return domain.ContractDetail{}, domain.ErrContractNotFound
+	}
+
+	asOf := time.Now()
+	views := c.Installments(asOf)
+	lines := make([]domain.InstallmentLine, 0, len(views))
+	detail := domain.ContractDetail{
+		ID:             c.ID(),
+		ProductID:      c.ProductID(),
+		SalePrice:      c.SalePrice(),
+		DownPayment:    c.DownPayment(),
+		FinancedAmount: c.FinancedAmount(),
+		Outstanding:    c.Outstanding(),
+		PaidAmount:     c.PaidAmount(),
+		Status:         string(c.Status()),
+		Cadence:        c.Cadence().String(),
+		StartDate:      c.StartDate(),
+		HasOverdue:     c.HasOverdue(asOf),
+		CreatedAt:      c.CreatedAt(),
+	}
+	for _, v := range views {
+		lines = append(lines, domain.InstallmentLine{
+			Number:  v.Number,
+			DueDate: v.DueDate,
+			Amount:  v.Amount,
+			Status:  string(v.Status),
+		})
+		// The next payment is the first line that is not fully paid.
+		if !detail.HasNext && v.Status != financingdomain.InstallmentPaid {
+			detail.HasNext = true
+			detail.NextDueDate = v.DueDate
+			detail.NextDueAmount = v.Amount
+		}
+	}
+	detail.Installments = lines
+
+	for _, p := range c.Payments() {
+		detail.Payments = append(detail.Payments, domain.PaymentLine{Amount: p.Amount(), PaidAt: p.PaidAt()})
+	}
+	return detail, nil
 }

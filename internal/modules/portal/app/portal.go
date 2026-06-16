@@ -31,3 +31,17 @@ func NewGetClientContracts(contracts domain.ContractReader) *GetClientContracts 
 func (uc *GetClientContracts) Execute(ctx context.Context, orgID, clientID string) ([]domain.ContractView, error) {
 	return uc.contracts.ListForClient(ctx, orgID, clientID)
 }
+
+// GetClientContract returns the full detail (schedule + payments) of one of the
+// logged-in client's contracts.
+type GetClientContract struct {
+	contracts domain.ContractReader
+}
+
+func NewGetClientContract(contracts domain.ContractReader) *GetClientContract {
+	return &GetClientContract{contracts: contracts}
+}
+
+func (uc *GetClientContract) Execute(ctx context.Context, orgID, clientID, contractID string) (domain.ContractDetail, error) {
+	return uc.contracts.GetForClient(ctx, orgID, clientID, contractID)
+}

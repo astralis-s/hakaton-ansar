@@ -21,4 +21,5 @@ var (
 	ErrMessageTooLong     = errors.New("message body is too long")
 
 	ErrClientNotFound = errors.New("client not found")
+	ErrContractNotFound = errors.New("contract not found")
 )

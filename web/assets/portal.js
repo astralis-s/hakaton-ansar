@@ -76,6 +76,12 @@
   }
 
   function PortalContracts() {
+    var sel = useState(null), id = sel[0], setId = sel[1];
+    if (id) return html`<${PortalContractDetail} id=${id} onBack=${function () { setId(null); }}/>`;
+    return html`<${PortalContractList} onOpen=${setId}/>`;
+  }
+
+  function PortalContractList(p) {
     var st = useState({ list: null, loading: true, err: '' }), s = st[0], set = st[1];
     useEffect(function () {
       api.portal.contracts().then(function (r) { set({ list: r || [], loading: false, err: '' }); })
@@ -83,11 +89,11 @@
     }, []);
     if (s.loading) return html`<${ui.Loading}/>`;
     if (s.err) return html`<div class="banner banner-warn">${s.err}</div>`;
-    if (!s.list.length) return html`<div class="card"><${ui.Empty} icon="contracts" title="Рассрочек пока нет"/></div>`;
+    if (!s.list.length) return html`<div class="card"><${ui.Empty} icon="contracts" title="Рассрочек пока нет" text="Оставьте заявку — менеджер оформит для вас договор."/></div>`;
     return html`<div class="entity-list">${s.list.map(function (c) {
-      return html`<div key=${c.id} class="card card-pad">
+      return html`<button key=${c.id} class="card card-pad portal-contract-card" onClick=${function () { p.onOpen(c.id); }}>
         <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <div><div style=${{ fontWeight: 700 }}>Договор ${c.id.slice(0, 8)}</div>
+          <div style=${{ textAlign: 'left' }}><div style=${{ fontWeight: 700 }}>Договор ${c.id.slice(0, 8)}</div>
             <div class="page-sub">Оформлен ${fmt.date(c.created_at)} · ${c.installments} платежей</div></div>
           <${ui.StatusChip} map="contractStatus" value=${c.status}/>
         </div>
@@ -95,8 +101,76 @@
           <div class="compact-field"><span>Цена</span><strong class="amana-num">${fmt.money(c.sale_price)}</strong></div>
           <div class="compact-field"><span>Остаток</span><strong class="amana-num">${fmt.money(c.outstanding)}</strong></div>
         </div>
-      </div>`;
+        <div class="portal-open-link">Открыть и посмотреть график <${Icon} name="arrow" size=${15}/></div>
+      </button>`;
     })}</div>`;
+  }
+
+  function PortalContractDetail(p) {
+    var st = useState({ d: null, loading: true, err: '' }), s = st[0], set = st[1];
+    useEffect(function () {
+      api.portal.contract(p.id).then(function (r) { set({ d: r, loading: false, err: '' }); })
+        .catch(function (e) { set({ d: null, loading: false, err: e.message }); });
+    }, [p.id]);
+    return html`<div>
+      <button class="btn btn-soft btn-sm" onClick=${p.onBack}><${Icon} name="back" size=${15}/> К списку</button>
+      ${s.loading ? html`<div style=${{ marginTop: 16 }}><${ui.Loading}/></div>`
+        : s.err ? html`<div class="banner banner-warn" style=${{ marginTop: 16 }}>${s.err}</div>`
+        : (function () {
+          var d = s.d;
+          var financed = parseFloat(d.financed_amount) || 0, paid = parseFloat(d.paid_amount) || 0;
+          var progress = financed > 0 ? Math.min(100, Math.round(paid / financed * 100)) : 0;
+          return html`<div class="grid" style=${{ gap: 14, marginTop: 14 }}>
+            <div class="card card-pad">
+              <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <div><div style=${{ fontWeight: 700, fontSize: 18 }}>Договор ${d.id.slice(0, 8)}</div>
+                  <div class="page-sub">Оформлен ${fmt.date(d.created_at)}</div></div>
+                <${ui.StatusChip} map="contractStatus" value=${d.status}/>
+              </div>
+              ${d.has_next && d.status === 'active' ? html`<div class="portal-next">
+                  <div><div class="portal-next-label">Следующий платёж</div>
+                    <div class="portal-next-amt amana-num">${fmt.money(d.next_due_amount)}</div></div>
+                  <div class="portal-next-date">до ${fmt.dateLong(d.next_due_date)}</div>
+                </div>`
+                : (d.status === 'completed' ? html`<div class="banner banner-accent" style=${{ marginTop: 14 }}>
+                    <${Icon} name="check" size=${17}/> Рассрочка полностью оплачена. БаракаЛлаху фика!</div>` : null)}
+              ${d.has_overdue ? html`<div class="banner banner-warn" style=${{ marginTop: 10 }}>
+                <${Icon} name="info" size=${16}/> Есть просроченный платёж — свяжитесь с менеджером в чате.</div>` : null}
+              <div class="portal-progress-row" style=${{ marginTop: 16 }}>
+                <div class="progress" style=${{ flex: 1 }}><i style=${{ width: progress + '%' }}></i></div>
+                <span class="amana-num" style=${{ fontSize: 13, fontWeight: 600 }}>${progress}%</span>
+              </div>
+              <div class="compact-fields compact-fields-3" style=${{ marginTop: 14 }}>
+                <div class="compact-field"><span>Цена</span><strong class="amana-num">${fmt.money(d.sale_price)}</strong></div>
+                <div class="compact-field"><span>Оплачено</span><strong class="amana-num">${fmt.money(d.paid_amount)}</strong></div>
+                <div class="compact-field"><span>Остаток</span><strong class="amana-num">${fmt.money(d.outstanding)}</strong></div>
+              </div>
+              <div class="banner banner-accent" style=${{ marginTop: 14 }}>
+                <${Icon} name="shield" size=${17}/> Цена зафиксирована при оформлении. Долг не растёт со временем — 0% риба.</div>
+            </div>
+            <div class="table-card">
+              <div class="table-card-head">График платежей — сколько и когда</div>
+              <table class="data-table"><thead><tr><th>№</th><th>Дата</th><th>Сумма</th><th>Статус</th></tr></thead>
+                <tbody>${d.schedule.map(function (it) {
+                  return html`<tr key=${it.number} class=${'data-row ' + (it.status === 'overdue' ? 'row-overdue' : '')}>
+                    <td><strong>${it.number}</strong></td>
+                    <td>${fmt.dateLong(it.due_date)}</td>
+                    <td class="table-money amana-num">${fmt.money(it.amount)}</td>
+                    <td><${ui.StatusChip} map="installmentStatus" value=${it.status}/></td>
+                  </tr>`;
+                })}</tbody></table>
+            </div>
+            ${d.payments.length ? html`<div class="table-card">
+              <div class="table-card-head">История платежей</div>
+              <table class="data-table"><thead><tr><th>Дата</th><th>Сумма</th></tr></thead>
+                <tbody>${d.payments.map(function (pm, i) {
+                  return html`<tr key=${i} class="data-row"><td>${fmt.dateTime(pm.paid_at)}</td>
+                    <td class="table-money amana-num delta-pos">+${fmt.money(pm.amount)}</td></tr>`;
+                })}</tbody></table>
+            </div>` : null}
+          </div>`;
+        })()}
+    </div>`;
   }
 
   window.AM.Portal = Portal;

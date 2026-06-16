@@ -26,6 +26,7 @@ type Handler struct {
 	thread    *app.GetThread
 	profile   *app.GetClientProfile
 	contracts *app.GetClientContracts
+	contract  *app.GetClientContract
 	log       *slog.Logger
 }
 
@@ -38,13 +39,15 @@ type HandlerDeps struct {
 	Thread    *app.GetThread
 	Profile   *app.GetClientProfile
 	Contracts *app.GetClientContracts
+	Contract  *app.GetClientContract
 	Log       *slog.Logger
 }
 
 func NewHandler(d HandlerDeps) *Handler {
 	return &Handler{
 		provision: d.Provision, getAccess: d.GetAccess, login: d.Login, send: d.Send,
-		listConv: d.ListConv, thread: d.Thread, profile: d.Profile, contracts: d.Contracts, log: d.Log,
+		listConv: d.ListConv, thread: d.Thread, profile: d.Profile, contracts: d.Contracts,
+		contract: d.Contract, log: d.Log,
 	}
 }
 
@@ -71,6 +74,7 @@ func (h *Handler) RegisterPublicPortalRoutes(r chi.Router) {
 func (h *Handler) RegisterProtectedPortalRoutes(r chi.Router) {
 	r.Get("/me", h.Me)
 	r.Get("/contracts", h.MyContracts)
+	r.Get("/contracts/{id}", h.MyContract)
 	r.Get("/messages", h.MyMessages)
 	r.Post("/messages", h.ClientSend)
 }
@@ -196,6 +200,16 @@ func (h *Handler) MyContracts(w http.ResponseWriter, r *http.Request) {
 	web.JSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) MyContract(w http.ResponseWriter, r *http.Request) {
+	p, _ := clientFrom(r.Context())
+	detail, err := h.contract.Execute(r.Context(), p.OrgID, p.ClientID, chi.URLParam(r, "id"))
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusOK, toContractDetailResponse(detail))
+}
+
 func (h *Handler) MyMessages(w http.ResponseWriter, r *http.Request) {
 	p, _ := clientFrom(r.Context())
 	messages, err := h.thread.Execute(r.Context(), p.OrgID, p.ClientID)
@@ -245,6 +259,8 @@ func mapError(err error) error {
 		return apperror.NotFound("account_not_found", "portal account not found")
 	case errors.Is(err, domain.ErrClientNotFound):
 		return apperror.NotFound("client_not_found", "client not found")
+	case errors.Is(err, domain.ErrContractNotFound):
+		return apperror.NotFound("contract_not_found", "contract not found")
 	case errors.Is(err, domain.ErrEmailTaken):
 		return apperror.Conflict("email_taken", "этот email уже используется")
 	case errors.Is(err, domain.ErrInvalidEmail),
