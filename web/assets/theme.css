@@ -5,7 +5,7 @@
   --bg:#eef1f5; --surface:#ffffff; --surface-2:#f2f5f8; --surface-3:#e8edf2;
   --border:#e3e9ef; --border-2:#d3dbe4;
   --fg:#0f1722; --fg-muted:#586474; --fg-subtle:#8a94a2;
-  --accent:#0a9266; --accent-2:#15b59c; --accent-fg:#ffffff; --accent-soft:#e6f7f0; --accent-bd:#b4e6d4;
+  --accent:#0a9266; --accent-2:#15b59c; --accent-fg:#ffffff; --accent-soft:#e6f7f0; --accent-bd:#b4e6d4; --accent-strong:#077a54;
   --grad:linear-gradient(135deg,#0a9d6c 0%,#14b89f 100%);
   --grad-soft:linear-gradient(135deg,rgba(10,157,108,.12),rgba(20,184,159,.12));
   --ring:rgba(13,170,116,.30);
@@ -34,7 +34,7 @@
   --bg:#080b0e; --surface:#13171b; --surface-2:#191e23; --surface-3:#222a31;
   --border:#242b32; --border-2:#333d47;
   --fg:#eef2f6; --fg-muted:#9aa4af; --fg-subtle:#69727c;
-  --accent:#21c48c; --accent-2:#27d6bc; --accent-fg:#04130d; --accent-soft:#0c2820; --accent-bd:#1b4839;
+  --accent:#21c48c; --accent-2:#27d6bc; --accent-fg:#04130d; --accent-soft:#0c2820; --accent-bd:#1b4839; --accent-strong:#16a878;
   --grad:linear-gradient(135deg,#17b884 0%,#23d4b6 100%);
   --grad-soft:linear-gradient(135deg,rgba(33,196,140,.16),rgba(39,214,188,.16));
   --ring:rgba(39,196,150,.40);
@@ -438,7 +438,8 @@ textarea.input { height:auto; padding:11px 13px; min-height:80px; resize:vertica
 .chat-row.mine { justify-content:flex-end; }
 .chat-row.theirs { justify-content:flex-start; }
 .chat-bubble { max-width:min(78%, 540px); padding:12px 14px; border-radius:20px; background:var(--surface-2); border:1px solid color-mix(in srgb, var(--border) 82%, transparent); box-shadow:0 10px 28px rgba(15, 23, 42, 0.06); }
-.chat-row.mine .chat-bubble { background:linear-gradient(135deg, color-mix(in srgb, var(--accent) 82%, white 18%), color-mix(in srgb, var(--accent-strong) 90%, transparent)); border-color:transparent; color:#fff; }
+.chat-row.mine .chat-bubble { background:var(--accent); background:linear-gradient(135deg, color-mix(in srgb, var(--accent) 82%, white 18%), color-mix(in srgb, var(--accent-strong) 90%, transparent)); border-color:transparent; color:#fff; }
+.chat-row.mine .chat-bubble .chat-bubble-body, .chat-row.mine .chat-bubble .chat-bubble-time { color:#fff; }
 .chat-bubble-body { font-size:14px; line-height:1.52; white-space:pre-wrap; word-break:break-word; }
 .chat-bubble-time { margin-top:5px; font-size:10.5px; opacity:.72; text-align:right; }
 .chat-thread-empty { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--fg-muted); font-size:13.5px; padding:42px 18px; }

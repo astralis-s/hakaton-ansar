@@ -1,0 +1,8 @@
+# Reverse proxy for the Amana app. SITE_ADDRESS is set by the deploy script:
+#   - a bare domain (e.g. amana-crm.ru) → Caddy obtains a Let's Encrypt cert and
+#     serves HTTPS, redirecting HTTP→HTTPS automatically;
+#   - ":80" (default) → plain HTTP on port 80 (no domain configured yet).
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+	reverse_proxy app:8080
+}

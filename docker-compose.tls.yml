@@ -1,0 +1,63 @@
+# HTTPS production deployment: Caddy (automatic Let's Encrypt TLS) in front of the
+# Amana app, plus PostgreSQL. Use this when a domain points to the server.
+#
+#   SITE_ADDRESS=amana-crm.ru   → Caddy serves https://amana-crm.ru (auto cert)
+#   SITE_ADDRESS=:80            → plain HTTP on port 80 (no domain / before DNS)
+#
+# Run via deploy/server-setup.sh with DOMAIN set, e.g.:
+#   DOMAIN=amana-crm.ru TELEGRAM_BOT_TOKEN=<token> bash deploy/server-setup.sh
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: amana
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-amana}
+      POSTGRES_DB: amana
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amana -d amana"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    environment:
+      APP_ENV: production
+      HTTP_PORT: "8080"
+      DATABASE_URL: postgres://amana:${POSTGRES_PASSWORD:-amana}@postgres:5432/amana?sslmode=disable
+      MIGRATE_ON_BOOT: "true"
+      SEED_ON_BOOT: "true"
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_POLL_TIMEOUT: 30s
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
