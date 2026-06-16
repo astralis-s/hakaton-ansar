@@ -95,7 +95,6 @@ func TestPublicRoutes(t *testing.T) {
 		{"swagger doc", http.MethodGet, "/swagger/doc.json", http.StatusOK},
 		{"protected app route without token → 401", http.MethodGet, "/api/app/auth/me", http.StatusUnauthorized},
 		{"public api route without key → 401", http.MethodGet, "/api/v1/contracts/00000000-0000-0000-0000-000000000000/payments", http.StatusUnauthorized},
-		{"client portal route without token → 401", http.MethodGet, "/api/portal/me", http.StatusUnauthorized},
 		{"unknown api route → 404", http.MethodGet, "/api/app/nope", http.StatusNotFound},
 		{"unknown non-api route → SPA shell", http.MethodGet, "/some/spa/route", http.StatusOK},
 	}

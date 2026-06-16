@@ -9,9 +9,8 @@
     ['clients', 'Клиенты', 'clients'],
     ['catalog', 'Каталог', 'catalog'],
     ['contracts', 'Договоры', 'contracts'],
-    ['requests', 'Заявки', 'doc'],
-    ['finance', 'Финансы', 'coins'],
     ['chat', 'Чат', 'chat'],
+    ['finance', 'Финансы', 'coins'],
     ['schedule', 'Календарь', 'calendar'],
     ['developers', 'Разработчикам', 'code', true],
     ['settings', 'Настройки', 'settings'],
@@ -43,10 +42,6 @@
     function flash(msg, err) { setToast({ msg: msg, err: err }); clearTimeout(flash._t); flash._t = setTimeout(function () { setToast(null); }, 2600); }
     function onAuthed() { setAuthed(true); go('dashboard'); flash('Вход выполнен'); }
     function logout() { api.logout(); setAuthed(false); setMe(null); location.hash = ''; }
-
-    // Client portal is a separate app (own login/token), reachable regardless of
-    // staff auth.
-    if (route.page === 'portal') return html`<${window.AM.Portal} theme=${theme} toggleTheme=${toggleTheme}/>`;
 
     if (!authed) return html`<${window.AM.Landing} theme=${theme} toggleTheme=${toggleTheme} onAuthed=${onAuthed}/>`;
 

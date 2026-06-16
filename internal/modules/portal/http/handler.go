@@ -58,17 +58,13 @@ func NewHandler(d HandlerDeps) *Handler {
 	}
 }
 
-// RegisterStaffRoutes mounts the staff-facing chat + portal-access routes onto a
-// JWT-protected /api/app router.
+// RegisterStaffRoutes mounts the staff-facing chat routes onto a JWT-protected
+// /api/app router.
 func (h *Handler) RegisterStaffRoutes(r chi.Router) {
 	r.Route("/chats", func(cr chi.Router) {
 		cr.Get("/", h.ListChats)
 		cr.Get("/{clientID}/messages", h.StaffThread)
 		cr.Post("/{clientID}/messages", h.StaffSend)
-	})
-	r.Route("/portal-access", func(pr chi.Router) {
-		pr.Get("/{clientID}", h.GetAccess)
-		pr.Put("/{clientID}", h.ProvisionAccess)
 	})
 }
 
@@ -82,8 +78,8 @@ func (h *Handler) RegisterProtectedPortalRoutes(r chi.Router) {
 	r.Get("/me", h.Me)
 	r.Get("/contracts", h.MyContracts)
 	r.Get("/contracts/{id}", h.MyContract)
-	r.Get("/products", h.Products)     // catalog the client may request from
-	r.Get("/requests", h.MyRequests)   // the client's own requests
+	r.Get("/products", h.Products)   // catalog the client may request from
+	r.Get("/requests", h.MyRequests) // the client's own requests
 	r.Post("/requests", h.SubmitRequest)
 	r.Get("/messages", h.MyMessages)
 	r.Post("/messages", h.ClientSend)

@@ -567,51 +567,10 @@
                       </tr>`;
                     })}</tbody></table>`}
             </div>
-            <${PortalAccessCard} client=${c} ctx=${ctx}/>
           </div>`;
         })()}
       <//>
     </div>`;
-  }
-
-  /* Portal access: staff provisions a client login so they can use the portal/chat. */
-  function PortalAccessCard(p) {
-    var acc = useAsync(function () { return api.getPortalAccess(p.client.id); }, [p.client.id]);
-    var m = useState(false), open = m[0], setOpen = m[1];
-    var a = acc.data || {};
-    return html`<div class="card card-pad">
-      <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <div>
-          <div style=${{ fontWeight: 700, marginBottom: 2 }}>Доступ в клиентский портал</div>
-          <div class="page-sub">${acc.loading ? 'Проверяем…' : (a.has_access ? ('Вход: ' + a.email) : 'Доступ не выдан')}</div>
-        </div>
-        <button class="btn btn-soft" onClick=${function () { setOpen(true); }}>
-          <${Icon} name="user" size=${16}/> ${a.has_access ? 'Изменить' : 'Выдать доступ'}</button>
-      </div>
-      ${a.has_access ? html`<div class="banner banner-info" style=${{ marginTop: 12 }}>
-        <${Icon} name="info" size=${16}/> Клиент входит на странице <b>/#/portal</b> по email и паролю и пишет вам в чат.</div>` : null}
-      ${open ? html`<${PortalAccessModal} client=${p.client} ctx=${p.ctx} current=${a}
-        onClose=${function () { setOpen(false); }}
-        onSaved=${function () { setOpen(false); acc.reload(); p.ctx.toast('Доступ обновлён'); }}/>` : null}
-    </div>`;
-  }
-  function PortalAccessModal(p) {
-    var f = useState({ email: (p.current && p.current.email) || '', password: '' }), v = f[0], set = f[1];
-    var b = useState(false), busy = b[0], setBusy = b[1];
-    function save() {
-      if (!v.email.trim() || v.password.length < 8) { p.ctx.toast('Укажите email и пароль (мин. 8 символов)', true); return; }
-      setBusy(true);
-      api.setPortalAccess(p.client.id, { email: v.email.trim(), password: v.password })
-        .then(p.onSaved).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
-    }
-    var inp = function (k, ph, type) { return html`<input class="input" type=${type || 'text'} value=${v[k]} placeholder=${ph}
-      onInput=${function (e) { var o = {}; o[k] = e.target.value; set(Object.assign({}, v, o)); }}/>`; };
-    return html`<${ui.Modal} title="Доступ в портал" onClose=${p.onClose}>
-      <div style=${{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 12 }}>${p.client.full_name} сможет войти в клиентский портал и переписываться с вами.</div>
-      <${ui.Field} label="Email для входа">${inp('email', 'client@mail.ru')}<//>
-      <${ui.Field} label="Пароль (мин. 8 символов)">${inp('password', '••••••••', 'password')}<//>
-      <button class="btn btn-primary btn-block" disabled=${busy} onClick=${save}>${busy ? html`<${ui.Spinner}/>` : 'Сохранить доступ'}</button>
-    <//>`;
   }
 
   function ProductCard(ctx) {
@@ -1490,163 +1449,107 @@
     return d.toISOString().slice(0, 10);
   }
 
-  /* ================= CONTRACT REQUESTS (заявки) =================
-     Clients submit requests from their portal; staff set the terms here and
-     approve → a real contract is created (financing CreateContract), or reject. */
-  function Requests(ctx) {
-    var st = useAsync(api.listContractRequests);
-    var clients = useAsync(api.listClients);
-    var products = useAsync(api.listProducts);
-    var ap = useState(null), approving = ap[0], setApproving = ap[1];
-    var list = st.data || [];
-    var pending = list.filter(function (r) { return r.status === 'pending'; });
-    var decided = list.filter(function (r) { return r.status !== 'pending'; });
-    var clientName = function (id) { var c = findByID(clients.data, id); return c ? c.full_name : 'Клиент'; };
-    var product = function (id) { return findByID(products.data, id); };
-
-    function reject(r) {
-      ctx.confirm({
-        title: 'Отклонить заявку?', text: clientName(r.client_id) + ' — ' + (product(r.product_id) ? product(r.product_id).name : ''),
-        okLabel: 'Отклонить', danger: true,
-        onOk: function () { api.rejectContractRequest(r.id).then(function () { st.reload(); ctx.toast('Заявка отклонена'); }).catch(function (e) { ctx.toast(e.message, true); }); },
-      });
-    }
-
-    function row(r, withActions) {
-      var pd = product(r.product_id);
-      return html`<tr key=${r.id} class="data-row">
-        <td><div class="table-primary"><span class="table-avatar">${initials(clientName(r.client_id))}</span>
-          <div><div class="table-title">${clientName(r.client_id)}</div>
-            <div class="table-subline">${pd ? pd.name : 'Товар'}${r.note ? ' · ' + r.note : ''}</div></div></div></td>
-        <td class="amana-num">${r.desired_installments} платежей${parseFloat(r.desired_down_payment) > 0 ? html` · взнос ${fmt.money(r.desired_down_payment)}` : ''}</td>
-        <td>${fmt.date(r.created_at)}</td>
-        <td>${withActions
-          ? html`<div style=${{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-              <button class="btn btn-primary btn-sm" onClick=${function () { setApproving(r); }}>Одобрить</button>
-              <button class="btn btn-ghost btn-sm" onClick=${function () { reject(r); }}>Отклонить</button></div>`
-          : (r.status === 'approved'
-              ? html`<button class="btn btn-soft btn-sm" onClick=${function () { ctx.go('contract', r.contract_id); }}>Открыть договор</button>`
-              : html`<${ui.StatusChip} map="requestStatus" value=${r.status}/>`)}</td>
-      </tr>`;
-    }
-
-    return html`<div>
-      <${PageHead} title="Заявки" sub=${pending.length + ' новых из ' + list.length}/>
-      <${Guard} loading=${st.loading || clients.loading || products.loading} err=${st.err || clients.err || products.err}>
-        ${list.length === 0
-          ? html`<div class="card"><${ui.Empty} icon="doc" title="Заявок пока нет" text="Клиенты оставляют заявки из своего портала (раздел «Оформить рассрочку»)."/></div>`
-          : html`<div class="grid" style=${{ gap: 16 }}>
-              <div class="table-card">
-                <div class="table-card-head">Новые заявки${pending.length ? ' · ' + pending.length : ''}</div>
-                ${pending.length === 0 ? html`<div class="card"><${ui.Empty} icon="check" title="Все заявки обработаны"/></div>`
-                  : html`<table class="data-table"><thead><tr><th>Клиент и товар</th><th>Пожелания</th><th>Дата</th><th></th></tr></thead>
-                      <tbody>${pending.map(function (r) { return row(r, true); })}</tbody></table>`}
-              </div>
-              ${decided.length ? html`<div class="table-card">
-                <div class="table-card-head">Обработанные</div>
-                <table class="data-table"><thead><tr><th>Клиент и товар</th><th>Пожелания</th><th>Дата</th><th></th></tr></thead>
-                  <tbody>${decided.map(function (r) { return row(r, false); })}</tbody></table>
-              </div>` : null}
-            </div>`}
-      <//>
-      ${approving ? html`<${ApproveRequestModal} req=${approving} product=${product(approving.product_id)} ctx=${ctx}
-        onClose=${function () { setApproving(null); }}
-        onApproved=${function () { setApproving(null); st.reload(); ctx.toast('Договор создан'); }}/>` : null}
-    </div>`;
-  }
-  function ApproveRequestModal(p) {
-    var f = useState({
-      cost_price: p.product ? p.product.cost_price : '',
-      markupMode: 'sum', markupSum: '15000', markupPct: '15',
-      down: p.req.desired_down_payment && parseFloat(p.req.desired_down_payment) > 0 ? p.req.desired_down_payment : '0',
-      installments: String(p.req.desired_installments || 6),
-      cadence: 'monthly', start: defaultStart(),
-    }), v = f[0], set = f[1];
-    var b = useState(false), busy = b[0], setBusy = b[1];
-    function upd(o) { set(Object.assign({}, v, o)); }
-    function approve() {
-      if (!v.cost_price || !v.cost_price.trim()) { p.ctx.toast('Укажите закупочную цену', true); return; }
-      var body = {
-        cost_price: v.cost_price.replace(',', '.').trim(),
-        down_payment: (v.down || '0').replace(',', '.').trim(),
-        installments: parseInt(String(v.installments).replace(/\D/g, ''), 10) || 1,
-        cadence: v.cadence, start_date: v.start,
-      };
-      if (v.markupMode === 'pct') body.markup_percent = v.markupPct; else body.markup_amount = v.markupSum || '0';
-      setBusy(true);
-      api.approveContractRequest(p.req.id, body).then(p.onApproved).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
-    }
-    var fld = function (k, ph) { return html`<input class="input" value=${v[k]} placeholder=${ph} onInput=${function (e) { var o = {}; o[k] = e.target.value; upd(o); }}/>`; };
-    return html`<${ui.Modal} title="Одобрить заявку" onClose=${p.onClose}>
-      <div style=${{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 14 }}>${p.product ? p.product.name : 'Товар'} — задайте условия мурабахи. Договор создастся сразу в статусе «Активен».</div>
-      <div class="grid" style=${{ gridTemplateColumns: 'repeat(2,1fr)' }}>
-        <${ui.Field} label="Закупочная цена, ₽">${fld('cost_price', '85000')}<//>
-        <${ui.Field} label="Наценка">
-          <div style=${{ display: 'flex', gap: 8 }}>
-            <select class="select" style=${{ width: 110 }} value=${v.markupMode} onChange=${function (e) { upd({ markupMode: e.target.value }); }}>
-              <option value="sum">Сумма ₽</option><option value="pct">Процент %</option></select>
-            ${v.markupMode === 'sum' ? fld('markupSum', '15000') : fld('markupPct', '15')}
-          </div>
-        <//>
-        <${ui.Field} label="Первый взнос, ₽">${fld('down', '0')}<//>
-        <${ui.Field} label="Число платежей">${fld('installments', '6')}<//>
-        <${ui.Field} label="Периодичность">
-          <select class="select" value=${v.cadence} onChange=${function (e) { upd({ cadence: e.target.value }); }}>
-            <option value="monthly">Ежемесячно</option><option value="weekly">Еженедельно</option></select>
-        <//>
-        <${ui.Field} label="Дата первого платежа">
-          <input class="input" type="date" value=${v.start} onInput=${function (e) { upd({ start: e.target.value }); }}/>
-        <//>
-      </div>
-      <button class="btn btn-primary btn-block" disabled=${busy} onClick=${approve}>${busy ? html`<${ui.Spinner}/>` : 'Одобрить и создать договор'}</button>
-    <//>`;
-  }
-
-  /* ================= CHAT (staff ↔ clients) =================
-     Two-pane inbox: conversation list + the shared ChatThread (which polls). A
-     client must be given portal access (in their card) before they can write. */
   function Chat(ctx) {
     var chats = useAsync(api.listChats);
-    var list = chats.data || [];
-    var sel = useState(null), selId = sel[0], setSelId = sel[1];
+    var clients = useAsync(api.listClients);
+    var q = useState(''), query = q[0], setQuery = q[1];
+    var sel = useState(ctx.route.id || null), selId = sel[0], setSelId = sel[1];
+    var convMap = {};
+    (chats.data || []).forEach(function (c) { convMap[c.client_id] = c; });
+    var allClients = (clients.data || []).slice().sort(function (a, b) {
+      var ca = convMap[a.id], cb = convMap[b.id];
+      var ta = ca ? new Date(ca.last_message_at || 0).getTime() : 0;
+      var tb = cb ? new Date(cb.last_message_at || 0).getTime() : 0;
+      if (ta !== tb) return tb - ta;
+      return String(a.full_name || '').localeCompare(String(b.full_name || ''), 'ru');
+    });
+    var filtered = allClients.filter(function (c) {
+      var hay = [c.full_name, c.phone, c.document].join(' ').toLowerCase();
+      return hay.indexOf(query.trim().toLowerCase()) >= 0;
+    });
+
     useEffect(function () {
-      if (selId == null && list.length > 0) setSelId(list[0].client_id);
-    }, [list.length]);
-    var current = list.filter(function (c) { return c.client_id === selId; })[0];
+      if (selId) return;
+      if (filtered.length > 0) setSelId(filtered[0].id);
+    }, [filtered.length, selId]);
+
+    useEffect(function () {
+      if (!selId || filtered.some(function (c) { return c.id === selId; })) return;
+      setSelId(filtered.length ? filtered[0].id : null);
+    }, [query, filtered.length, selId]);
+
+    var current = findByID(clients.data, selId);
+    var currentConv = selId ? convMap[selId] : null;
+    var activeCount = Object.keys(convMap).length;
+
+    function previewText(c) {
+      if (!c) return 'Диалог ещё не начат';
+      return (c.last_sender === 'staff' ? 'Вы: ' : '') + (c.last_message || 'Без текста');
+    }
+
     return html`<div>
-      <${PageHead} title="Чат" sub="Сообщения с клиентами"/>
-      <${Guard} loading=${chats.loading} err=${chats.err}>
-        ${list.length === 0
-          ? html`<div class="card"><${ui.Empty} icon="chat" title="Пока нет диалогов"
-              text="Клиенты пишут из своего портала. Выдайте клиенту доступ в его карточке (раздел «Клиенты»)."/></div>`
-          : html`<div class="chat-layout">
-              <div class="chat-list">
-                ${list.map(function (c) {
-                  return html`<button key=${c.client_id} class=${'chat-list-item ' + (selId === c.client_id ? 'active' : '')}
-                    onClick=${function () { setSelId(c.client_id); }}>
-                    <span class="chat-avatar">${initials(c.client_name)}</span>
-                    <div class="chat-list-copy">
-                      <div class="chat-list-top">
-                        <span class="chat-list-name">${c.client_name || 'Клиент'}</span>
-                        <span class="chat-list-time">${fmt.time(c.last_message_at)}</span>
+      <${PageHead} title="Чат" sub=${activeCount ? ('Активных диалогов: ' + activeCount) : 'Внутренняя переписка с клиентами'}/>
+      <${Guard} loading=${chats.loading || clients.loading} err=${chats.err || clients.err}>
+        ${(clients.data || []).length === 0
+          ? html`<div class="card"><${ui.Empty} icon="clients" title="Клиентов пока нет" text="Добавьте клиента, чтобы начать переписку."/></div>`
+          : html`<div class="chat-workspace">
+              <div class="chat-sidebar">
+                <div class="chat-sidebar-head">
+                  <div>
+                    <div class="chat-sidebar-title">Клиенты</div>
+                    <div class="chat-sidebar-sub">${allClients.length} в базе · ${activeCount} с перепиской</div>
+                  </div>
+                  <span class="chat-counter">${filtered.length}</span>
+                </div>
+                <div class="chat-search">
+                  <${Icon} name="search" size=${16}/>
+                  <input class="input" value=${query} placeholder="Поиск по имени, телефону, документу"
+                    onInput=${function (e) { setQuery(e.target.value); }}/>
+                </div>
+                <div class="chat-client-list">
+                  ${filtered.length === 0 ? html`<div class="chat-list-empty">Ничего не найдено</div>` : filtered.map(function (client) {
+                    var conv = convMap[client.id];
+                    return html`<button key=${client.id} class=${'chat-client-item ' + (selId === client.id ? 'active' : '')}
+                      onClick=${function () { setSelId(client.id); }}>
+                      <span class="chat-avatar chat-avatar-logo"><${Icon} name="logo" size=${19} sw=${1.9}/></span>
+                      <div class="chat-client-copy">
+                        <div class="chat-client-top">
+                          <span class="chat-client-name">${client.full_name}</span>
+                          <span class="chat-client-time">${conv ? fmt.time(conv.last_message_at) : 'Новый'}</span>
+                        </div>
+                        <div class="chat-client-preview">${previewText(conv)}</div>
+                        <div class="chat-client-meta">${client.phone || 'Телефон не указан'}</div>
                       </div>
-                      <div class="chat-list-preview">${c.last_sender === 'staff' ? 'Вы: ' : ''}${c.last_message || '—'}</div>
-                    </div>
-                  </button>`;
-                })}
+                    </button>`;
+                  })}
+                </div>
               </div>
-              <div class="chat-pane">
-                ${current ? html`<div class="chat-pane-head">
-                    <span class="chat-avatar">${initials(current.client_name)}</span>
-                    <div><div class="chat-pane-name">${current.client_name || 'Клиент'}</div>
-                      <div class="chat-pane-sub">Клиент</div></div>
-                  </div>` : null}
-                ${selId ? html`<${ui.ChatThread} threadKey=${selId} meKind="staff"
+              <div class="chat-main-card">
+                ${current ? html`<div class="chat-main-head">
+                    <div class="chat-main-person">
+                      <span class="chat-avatar chat-avatar-logo chat-avatar-lg"><${Icon} name="logo" size=${24} sw=${1.9}/></span>
+                      <div>
+                        <div class="chat-main-name">${current.full_name}</div>
+                        <div class="chat-main-sub">${current.phone || 'Телефон не указан'}${current.document ? ' · ' + current.document : ''}</div>
+                      </div>
+                    </div>
+                    <div class="chat-main-actions">
+                      <span class=${'compact-chip ' + (currentConv ? 'compact-chip-ok' : 'compact-chip-muted')}>${currentConv ? 'Диалог активен' : 'Новый диалог'}</span>
+                      <button class="btn btn-ghost btn-sm" onClick=${function () { ctx.go('client', current.id); }}>
+                        <${Icon} name="arrow" size=${14}/> Карточка клиента
+                      </button>
+                    </div>
+                  </div>
+                  <div class="chat-main-summary">
+                    ${currentConv ? html`<span>Последнее сообщение ${fmt.date(currentConv.last_message_at)} в ${fmt.time(currentConv.last_message_at)}</span>` : html`<span>Переписка ещё не начата. Можно отправить первое сообщение.</span>`}
+                  </div>
+                  <${ui.ChatThread} threadKey=${selId} meKind="staff"
                     load=${function () { return api.chatThread(selId); }}
                     onSend=${function (body) { return api.sendChatMessage(selId, body).then(function (r) { chats.reload(); return r; }); }}
                     onError=${function (e) { ctx.toast(e.message, true); }}
-                    placeholder="Ответить клиенту…"/>`
-                  : html`<div class="chat-empty">Выберите диалог</div>`}
+                    placeholder="Напишите клиенту коротко и по делу…"
+                    emptyText="Сообщений пока нет. Отправьте первое сообщение клиенту."/>`
+                  : html`<div class="card"><${ui.Empty} icon="chat" title="Выберите клиента" text="Слева можно открыть существующий диалог или начать новый."/></div>`}
               </div>
             </div>`}
       <//>
@@ -1663,6 +1566,7 @@
     var exp = useAsync(api.listExpenses);
     var products = useAsync(api.listProducts);
     var m = useState(false), open = m[0], setOpen = m[1];
+    var pg = useState(1), salesPage = pg[0], setSalesPage = pg[1];
     var r = rep.data;
     var productName = function (id) { var p = findByID(products.data, id); return p ? p.name : '—'; };
 
@@ -1704,7 +1608,10 @@
           </div>
           <div class="grid" style=${{ gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
             <div class="table-card">
-              <div class="table-card-head">Прочие расходы (вручную)</div>
+              <div class="table-card-head finance-panel-head finance-panel-head-expenses">
+                <span class="finance-panel-kicker">Расходы</span>
+                <strong>Прочие расходы</strong>
+              </div>
               <${Guard} loading=${exp.loading} err=${exp.err}>
                 ${(exp.data || []).length === 0 ? html`<div class="card"><${ui.Empty} icon="coins" title="Расходов нет" text="Добавьте аренду, ремонт, логистику и т.д."/></div>`
                   : html`<table class="data-table"><thead><tr><th>Категория</th><th>Дата</th><th>Сумма</th><th></th></tr></thead>
@@ -1719,19 +1626,46 @@
               <//>
             </div>
             <div class="table-card">
-              <div class="table-card-head">Доходы от продаж</div>
+              <div class="table-card-head finance-panel-head finance-panel-head-sales">
+                <span class="finance-panel-kicker">Продажи</span>
+                <strong>Доходы от продаж</strong>
+              </div>
               ${(function () {
                 var sales = (r.sales || []).filter(function (s) { return s.status !== 'cancelled'; });
+                var perPage = 4;
+                var totalPages = Math.max(1, Math.ceil(sales.length / perPage));
+                var currentPage = Math.min(salesPage, totalPages);
+                var visibleSales = sales.slice((currentPage - 1) * perPage, currentPage * perPage);
                 return sales.length === 0 ? html`<div class="card"><${ui.Empty} icon="contracts" title="Продаж пока нет"/></div>`
-                  : html`<table class="data-table"><thead><tr><th>Товар</th><th>Продажа</th><th>Закупка</th><th>Прибыль</th></tr></thead>
-                      <tbody>${sales.map(function (s) {
-                        return html`<tr key=${s.contract_id} class="data-row row-link" onClick=${function () { ctx.go('contract', s.contract_id); }}>
-                          <td><div class="table-title">${productName(s.product_id)}</div></td>
-                          <td class="table-money amana-num">${fmt.money(s.sale_price)}</td>
-                          <td class="table-money amana-num">${fmt.money(s.cost_price)}</td>
-                          <td><strong class="table-money amana-num delta-pos">+${fmt.money(s.profit)}</strong></td>
-                        </tr>`;
-                      })}</tbody></table>`;
+                  : html`<div class="finance-sales-list">${visibleSales.map(function (s) {
+                      return html`<button key=${s.contract_id} class="finance-sale-card row-link" onClick=${function () { ctx.go('contract', s.contract_id); }}>
+                        <div class="finance-sale-main">
+                          <div class="finance-sale-top">
+                            <div>
+                              <div class="finance-sale-title">${productName(s.product_id)}</div>
+                              <div class="finance-sale-subline">Договор ${s.contract_id.slice(0, 8)} · ${fmt.date(s.created_at)}</div>
+                            </div>
+                            <strong class="finance-sale-profit amana-num delta-pos">+${fmt.money(s.profit)}</strong>
+                          </div>
+                          <div class="finance-sale-meta">
+                            <span>Продажа <b class="amana-num">${fmt.money(s.sale_price)}</b></span>
+                            <span>Закупка <b class="amana-num">${fmt.money(s.cost_price)}</b></span>
+                            <${ui.StatusChip} map="contractStatus" value=${s.status}/>
+                          </div>
+                        </div>
+                        <div class="finance-sale-arrow"><${Icon} name="arrow" size=${16}/></div>
+                      </button>`;
+                    })}
+                    ${totalPages > 1 ? html`<div class="finance-sales-pagination">
+                      <button class="btn btn-ghost btn-sm" disabled=${currentPage === 1} onClick=${function () { setSalesPage(currentPage - 1); }}>
+                        <${Icon} name="back" size=${14}/> Назад
+                      </button>
+                      <div class="finance-sales-page-indicator">Страница <b class="amana-num">${currentPage}</b> из <b class="amana-num">${totalPages}</b></div>
+                      <button class="btn btn-ghost btn-sm" disabled=${currentPage === totalPages} onClick=${function () { setSalesPage(currentPage + 1); }}>
+                        Вперёд <${Icon} name="arrow" size=${14}/>
+                      </button>
+                    </div>` : null}
+                  </div>`;
               })()}
             </div>
           </div>
@@ -1771,6 +1705,6 @@
   }
 
   AM.screens = { dashboard: Dashboard, clients: Clients, client: ClientCard, catalog: Catalog, product: ProductCard, contracts: Contracts, reminder: ReminderCard,
-    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule, finance: Finance, chat: Chat, requests: Requests,
+    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule, chat: Chat, finance: Finance,
     developers: Developers, settings: Settings };
 })();
