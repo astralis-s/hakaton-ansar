@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/astralis-s/hakaton-ansar/internal/shared/document"
 	"github.com/astralis-s/hakaton-ansar/internal/shared/money"
 )
 
@@ -170,6 +171,13 @@ type RequestView struct {
 type RequestService interface {
 	Submit(ctx context.Context, in NewRequestInput) (RequestView, error)
 	ListForClient(ctx context.Context, orgID, clientID string) ([]RequestView, error)
+}
+
+// ContractDocBuilder builds the printable contract agreement for one of the
+// client's contracts (the clientID scopes access to their own contracts).
+// Implemented in infra over the financing context.
+type ContractDocBuilder interface {
+	Build(ctx context.Context, orgID, contractID, clientID string) (document.Contract, error)
 }
 
 // TxManager runs a function inside a single database transaction.

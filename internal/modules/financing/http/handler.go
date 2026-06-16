@@ -14,6 +14,7 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/financing/domain"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/apperror"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/authctx"
+	"github.com/astralis-s/hakaton-ansar/internal/platform/pdf"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/web"
 	"github.com/astralis-s/hakaton-ansar/internal/shared/money"
 )
@@ -30,9 +31,10 @@ type Handler struct {
 	dashboard  *app.Dashboard
 	listReq    *app.ListContractRequests
 	approveReq *app.ApproveContractRequest
-	rejectReq  *app.RejectContractRequest
-	log        *slog.Logger
-	ownerMW    func(http.Handler) http.Handler
+	rejectReq   *app.RejectContractRequest
+	contractDoc *app.BuildContractDoc
+	log         *slog.Logger
+	ownerMW     func(http.Handler) http.Handler
 }
 
 // HandlerDeps groups the use-cases for NewHandler.
@@ -45,11 +47,12 @@ type HandlerDeps struct {
 	Settle     *app.SettleEarly
 	Cancel     *app.CancelContract
 	Dashboard  *app.Dashboard
-	ListReq    *app.ListContractRequests
-	ApproveReq *app.ApproveContractRequest
-	RejectReq  *app.RejectContractRequest
-	Log        *slog.Logger
-	OwnerOnly  func(http.Handler) http.Handler
+	ListReq     *app.ListContractRequests
+	ApproveReq  *app.ApproveContractRequest
+	RejectReq   *app.RejectContractRequest
+	ContractDoc *app.BuildContractDoc
+	Log         *slog.Logger
+	OwnerOnly   func(http.Handler) http.Handler
 }
 
 func NewHandler(d HandlerDeps) *Handler {
@@ -57,7 +60,7 @@ func NewHandler(d HandlerDeps) *Handler {
 		preview: d.Preview, create: d.Create, get: d.Get, list: d.List,
 		pay: d.Pay, settle: d.Settle, cancel: d.Cancel,
 		dashboard: d.Dashboard, listReq: d.ListReq, approveReq: d.ApproveReq, rejectReq: d.RejectReq,
-		log: d.Log, ownerMW: d.OwnerOnly,
+		contractDoc: d.ContractDoc, log: d.Log, ownerMW: d.OwnerOnly,
 	}
 }
 
@@ -71,8 +74,25 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		cr.Get("/{id}", h.Get)
 		cr.Post("/{id}/payments", h.RegisterPayment)
 		cr.Post("/{id}/settle", h.SettleEarly)
+		cr.Get("/{id}/pdf", h.ContractPDF)
 		cr.With(h.ownerMW).Post("/{id}/cancel", h.Cancel)
 	})
+}
+
+// ContractPDF streams the murabaha contract agreement as a PDF.
+func (h *Handler) ContractPDF(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	doc, err := h.contractDoc.Execute(r.Context(), p.OrgID, chi.URLParam(r, "id"), "")
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	data, err := pdf.RenderContract(doc)
+	if err != nil {
+		apperror.Write(w, r, h.log, apperror.Internal("render contract pdf", err))
+		return
+	}
+	web.WritePDF(w, "dogovor-"+doc.Number+".pdf", data)
 }
 
 // ListRequests returns the org's contract requests (staff inbox).

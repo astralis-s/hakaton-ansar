@@ -933,6 +933,7 @@
                 <div style=${{ color: 'var(--fg-muted)', fontSize: 13.5 }}>остаток <b class="amana-num" style=${{ color: 'var(--fg)' }}>${fmt.money(c.outstanding)}</b> · оплачено ${fmt.money(c.paid_amount)}</div>
               </div>
               <div style=${{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+                <button class="btn btn-soft btn-sm" onClick=${function () { api.downloadContractPdf(c.id).catch(function (e) { ctx.toast(e.message, true); }); }}><${Icon} name="doc" size=${15}/> Скачать PDF</button>
                 ${c.status === 'active' ? html`<button class="btn btn-primary btn-sm" onClick=${function () { setPayOpen({ amount: '' }); }}>Принять платёж</button>` : null}
                 ${c.status === 'active' ? html`<button class="btn btn-ghost btn-sm" onClick=${doSettle}>Досрочно погасить</button>` : null}
                 ${(c.status === 'active' && ctx.isOwner) ? html`<button class="btn btn-danger btn-sm" onClick=${doCancel}>Отменить</button>` : null}
@@ -1582,7 +1583,10 @@
 
     return html`<div>
       <${PageHead} title="Финансы" sub="Доходы и расходы — доход = продажа − закупка"
-        actions=${html`<button class="btn btn-primary" onClick=${function () { setOpen(true); }}><${Icon} name="plus" size=${17}/> Добавить расход</button>`}/>
+        actions=${html`<div style=${{ display: 'flex', gap: 9 }}>
+          <button class="btn btn-soft" onClick=${function () { api.downloadFinanceReportPdf().catch(function (e) { ctx.toast(e.message, true); }); }}><${Icon} name="doc" size=${16}/> Отчёт PDF</button>
+          <button class="btn btn-primary" onClick=${function () { setOpen(true); }}><${Icon} name="plus" size=${17}/> Добавить расход</button>
+        </div>`}/>
       <${Guard} loading=${rep.loading} err=${rep.err}>
         ${r ? html`<div>
           <div class="grid" style=${{ gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 12, marginBottom: 16 }}>

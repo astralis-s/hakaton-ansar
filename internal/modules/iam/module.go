@@ -32,6 +32,7 @@ type Module struct {
 	jwtMW    func(http.Handler) http.Handler
 	apiKeyMW func(http.Handler) http.Handler
 	ownerMW  func(http.Handler) http.Handler
+	orgs     domain.OrganizationRepository
 }
 
 // New wires the iam module.
@@ -63,8 +64,13 @@ func New(d Deps) *Module {
 		jwtMW:    iamhttp.JWTAuth(tokens, d.Log),
 		apiKeyMW: iamhttp.APIKeyAuth(authKeyUC, d.Log),
 		ownerMW:  iamhttp.RequireOwner(d.Log),
+		orgs:     orgRepo,
 	}
 }
+
+// Organizations exposes the organization repository for cross-context reads
+// (e.g. resolving the seller name on contract documents).
+func (m *Module) Organizations() domain.OrganizationRepository { return m.orgs }
 
 // JWTMiddleware protects the internal /api/app surface (Authorization: Bearer).
 func (m *Module) JWTMiddleware() func(http.Handler) http.Handler { return m.jwtMW }

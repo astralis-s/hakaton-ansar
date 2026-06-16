@@ -28,6 +28,7 @@ type Deps struct {
 	Contracts domain.ContractReader
 	Catalog   domain.CatalogReader
 	Requests  domain.RequestService
+	Doc       domain.ContractDocBuilder
 }
 
 // Module is the assembled portal module.
@@ -58,6 +59,7 @@ func New(d Deps) *Module {
 		Browse:    app.NewBrowseProducts(d.Catalog),
 		SubmitReq: app.NewSubmitRequest(d.Requests),
 		MyReqs:    app.NewListMyRequests(d.Requests),
+		Doc:       app.NewGetContractDoc(d.Doc),
 		Log:       d.Log,
 	})
 	return &Module{handler: handler, clientMW: portalhttp.ClientAuth(tokens, d.Log), send: send}

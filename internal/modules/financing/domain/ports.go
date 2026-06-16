@@ -35,9 +35,10 @@ type ContractRepository interface {
 }
 
 // ProductInfo is the minimal product data financing needs to gate contract
-// creation (it must refuse haram products).
+// creation (it must refuse haram products) and to name the product on documents.
 type ProductInfo struct {
 	ID      string
+	Name    string
 	IsHaram bool
 }
 
@@ -47,12 +48,26 @@ type ProductReader interface {
 	Get(ctx context.Context, orgID, productID string) (ProductInfo, error)
 }
 
+// ClientContact is the client data printed on a contract document.
+type ClientContact struct {
+	Name     string
+	Phone    string
+	Document string
+}
+
 // ClientReader checks client existence and resolves display names in the crm
 // context.
 type ClientReader interface {
 	Exists(ctx context.Context, orgID, clientID string) (bool, error)
 	// Names resolves client ids to their full names (id → name).
 	Names(ctx context.Context, orgID string, ids []string) (map[string]string, error)
+	// Contact returns a single client's contact details for documents.
+	Contact(ctx context.Context, orgID, clientID string) (ClientContact, error)
+}
+
+// OrgReader resolves an organization's display name (the seller on documents).
+type OrgReader interface {
+	Name(ctx context.Context, orgID string) (string, error)
 }
 
 // StockReserver reserves one unit of a product when a contract is created. It

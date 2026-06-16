@@ -27,6 +27,7 @@ type Deps struct {
 	Products              domain.ProductReader
 	Clients               domain.ClientReader
 	Stock                 domain.StockReserver
+	Orgs                  domain.OrgReader
 	OwnerOnly             func(http.Handler) http.Handler
 }
 
@@ -37,6 +38,7 @@ type Module struct {
 	getContract    *app.GetContract
 	submitRequest  *app.SubmitContractRequest
 	listClientReqs *app.ListClientRequests
+	buildDoc       *app.BuildContractDoc
 	contracts      domain.ContractRepository
 }
 
@@ -49,6 +51,7 @@ func New(d Deps) *Module {
 	getContract := app.NewGetContract(contracts)
 	submitRequest := app.NewSubmitContractRequest(requests, d.Products, d.Clients)
 	listClientReqs := app.NewListClientRequests(requests)
+	buildDoc := app.NewBuildContractDoc(contracts, d.Products, d.Clients, d.Orgs)
 
 	handler := financinghttp.NewHandler(financinghttp.HandlerDeps{
 		Preview:    app.NewPreviewContract(d.ComparisonRatePercent),
@@ -62,12 +65,13 @@ func New(d Deps) *Module {
 		ListReq:    app.NewListContractRequests(requests),
 		ApproveReq: app.NewApproveContractRequest(requests, createContract, d.Tx),
 		RejectReq:  app.NewRejectContractRequest(requests, d.Tx),
+		ContractDoc: buildDoc,
 		Log:        d.Log,
 		OwnerOnly:  d.OwnerOnly,
 	})
 	return &Module{
 		handler: handler, createContract: createContract, getContract: getContract,
-		submitRequest: submitRequest, listClientReqs: listClientReqs, contracts: contracts,
+		submitRequest: submitRequest, listClientReqs: listClientReqs, buildDoc: buildDoc, contracts: contracts,
 	}
 }
 
@@ -91,3 +95,7 @@ func (m *Module) GetContractUseCase() *app.GetContract { return m.getContract }
 // request use-cases so the portal can offer them on its surface.
 func (m *Module) SubmitRequestUseCase() *app.SubmitContractRequest { return m.submitRequest }
 func (m *Module) ListClientRequestsUseCase() *app.ListClientRequests { return m.listClientReqs }
+
+// BuildContractDocUseCase exposes the contract-document builder (for the portal
+// client download).
+func (m *Module) BuildContractDocUseCase() *app.BuildContractDoc { return m.buildDoc }

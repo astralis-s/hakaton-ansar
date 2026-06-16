@@ -20,6 +20,7 @@ type Deps struct {
 	Pool  *pgxpool.Pool
 	Log   *slog.Logger
 	Sales domain.SalesReader
+	Orgs  domain.OrgReader
 }
 
 // Module is the assembled ledger module.
@@ -31,11 +32,12 @@ type Module struct {
 func New(d Deps) *Module {
 	expenses := infra.NewExpenseRepository(d.Pool)
 	handler := ledgerhttp.NewHandler(ledgerhttp.HandlerDeps{
-		Report: app.NewGetReport(d.Sales, expenses),
-		Create: app.NewCreateExpense(expenses),
-		List:   app.NewListExpenses(expenses),
-		Delete: app.NewDeleteExpense(expenses),
-		Log:    d.Log,
+		Report:    app.NewGetReport(d.Sales, expenses),
+		Create:    app.NewCreateExpense(expenses),
+		List:      app.NewListExpenses(expenses),
+		Delete:    app.NewDeleteExpense(expenses),
+		ReportDoc: app.NewBuildReportDoc(d.Sales, expenses, d.Orgs),
+		Log:       d.Log,
 	})
 	return &Module{handler: handler}
 }

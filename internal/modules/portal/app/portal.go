@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/astralis-s/hakaton-ansar/internal/modules/portal/domain"
+	"github.com/astralis-s/hakaton-ansar/internal/shared/document"
 )
 
 // GetClientProfile returns the logged-in client's own profile.
@@ -44,4 +45,18 @@ func NewGetClientContract(contracts domain.ContractReader) *GetClientContract {
 
 func (uc *GetClientContract) Execute(ctx context.Context, orgID, clientID, contractID string) (domain.ContractDetail, error) {
 	return uc.contracts.GetForClient(ctx, orgID, clientID, contractID)
+}
+
+// GetContractDoc builds the printable agreement for one of the client's
+// contracts (PDF rendering happens in the transport layer).
+type GetContractDoc struct {
+	builder domain.ContractDocBuilder
+}
+
+func NewGetContractDoc(builder domain.ContractDocBuilder) *GetContractDoc {
+	return &GetContractDoc{builder: builder}
+}
+
+func (uc *GetContractDoc) Execute(ctx context.Context, orgID, contractID, clientID string) (document.Contract, error) {
+	return uc.builder.Build(ctx, orgID, contractID, clientID)
 }

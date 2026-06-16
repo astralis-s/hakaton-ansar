@@ -35,6 +35,28 @@
     return data;
   }
 
+  // download fetches a binary (PDF) with the right auth header and triggers a
+  // browser download (a plain <a href> can't send the Authorization header).
+  async function download(base, path, tokenGetter, filename) {
+    var headers = {};
+    var tok = tokenGetter();
+    if (tok) headers['Authorization'] = 'Bearer ' + tok;
+    var res;
+    try { res = await fetch(base + path, { headers: headers }); }
+    catch (e) { var n = new Error('Сеть недоступна'); n.status = 0; throw n; }
+    if (!res.ok) {
+      var msg = 'Ошибка ' + res.status;
+      try { var d = await res.json(); msg = (d.error && d.error.message) || msg; } catch (e) {}
+      var err = new Error(msg); err.status = res.status; throw err;
+    }
+    var blob = await res.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename || 'document.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+  }
+
   var api = {
     getToken: getToken,
     setToken: setToken,
@@ -70,12 +92,14 @@
     registerPayment: function (id, amount) { return request('POST', '/contracts/' + id + '/payments', { amount: amount }); },
     settleContract: function (id) { return request('POST', '/contracts/' + id + '/settle'); },
     cancelContract: function (id) { return request('POST', '/contracts/' + id + '/cancel'); },
+    downloadContractPdf: function (id) { return download('/api/app', '/contracts/' + id + '/pdf', getToken, 'dogovor-' + id.slice(0, 8) + '.pdf'); },
 
     listChats: function () { return request('GET', '/chats'); },
     chatThread: function (clientId) { return request('GET', '/chats/' + clientId + '/messages'); },
     sendChatMessage: function (clientId, body) { return request('POST', '/chats/' + clientId + '/messages', { body: body }); },
 
     financeReport: function () { return request('GET', '/finance/report'); },
+    downloadFinanceReportPdf: function () { return download('/api/app', '/finance/report.pdf', getToken, 'finansy-otchet.pdf'); },
     listExpenses: function () { return request('GET', '/finance/expenses'); },
     createExpense: function (p) { return request('POST', '/finance/expenses', p); },
     deleteExpense: function (id) { return request('DELETE', '/finance/expenses/' + id); },

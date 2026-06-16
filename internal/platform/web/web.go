@@ -28,6 +28,14 @@ func JSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
+// WritePDF streams a generated PDF as a downloadable attachment.
+func WritePDF(w http.ResponseWriter, filename string, data []byte) {
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
 // DecodeAndValidate reads a JSON body into dst and runs struct validation.
 // On any failure it returns an *apperror.Error of kind Invalid (HTTP 400).
 func DecodeAndValidate(w http.ResponseWriter, r *http.Request, dst any) error {

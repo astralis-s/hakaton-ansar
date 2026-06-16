@@ -46,12 +46,14 @@ func newTestRouter() chi.Router {
 		ComparisonRatePercent: decimal.NewFromInt(28),
 		Products:              financinginfra.NewProductReader(catalogModule.Products()),
 		Clients:               financinginfra.NewClientReader(crmModule.Clients()),
+		Orgs:                  financinginfra.NewOrgReader(iamModule.Organizations()),
 		OwnerOnly:             iamModule.OwnerMiddleware(),
 	})
 	ledgerModule := ledger.New(ledger.Deps{
 		Pool:  nil,
 		Log:   nil,
 		Sales: ledgerinfra.NewSalesReader(financingModule.Contracts()),
+		Orgs:  ledgerinfra.NewOrgReader(iamModule.Organizations()),
 	})
 	portalModule := portal.New(portal.Deps{
 		Pool:      nil,
@@ -63,6 +65,7 @@ func newTestRouter() chi.Router {
 		Contracts: portalinfra.NewContractReader(financingModule.Contracts()),
 		Catalog:   portalinfra.NewCatalogReader(catalogModule.Products()),
 		Requests:  portalinfra.NewRequestService(financingModule.SubmitRequestUseCase(), financingModule.ListClientRequestsUseCase()),
+		Doc:       portalinfra.NewContractDocBuilder(financingModule.BuildContractDocUseCase()),
 	})
 	prayerLoc := schedulingdomain.Location{Lat: 43.3178, Lon: 45.6949, TZ: time.UTC}
 	schedulingModule := scheduling.New(scheduling.Deps{

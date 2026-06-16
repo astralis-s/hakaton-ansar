@@ -127,12 +127,14 @@ func run() error {
 		Products:              financinginfra.NewProductReader(catalogModule.Products()),
 		Clients:               financinginfra.NewClientReader(crmModule.Clients()),
 		Stock:                 financinginfra.NewStockReserver(catalogModule.Stock()),
+		Orgs:                  financinginfra.NewOrgReader(iamModule.Organizations()),
 		OwnerOnly:             iamModule.OwnerMiddleware(),
 	})
 	ledgerModule := ledger.New(ledger.Deps{
 		Pool:  pool,
 		Log:   log,
 		Sales: ledgerinfra.NewSalesReader(financingModule.Contracts()),
+		Orgs:  ledgerinfra.NewOrgReader(iamModule.Organizations()),
 	})
 	portalModule := portal.New(portal.Deps{
 		Pool:      pool,
@@ -144,6 +146,7 @@ func run() error {
 		Contracts: portalinfra.NewContractReader(financingModule.Contracts()),
 		Catalog:   portalinfra.NewCatalogReader(catalogModule.Products()),
 		Requests:  portalinfra.NewRequestService(financingModule.SubmitRequestUseCase(), financingModule.ListClientRequestsUseCase()),
+		Doc:       portalinfra.NewContractDocBuilder(financingModule.BuildContractDocUseCase()),
 	})
 
 	// Telegram support bot (optional): bridges Telegram customers to the staff

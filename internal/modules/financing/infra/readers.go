@@ -30,7 +30,7 @@ func (r *ProductReader) Get(ctx context.Context, orgID, productID string) (domai
 		}
 		return domain.ProductInfo{}, err
 	}
-	return domain.ProductInfo{ID: p.ID(), IsHaram: p.IsHaram()}, nil
+	return domain.ProductInfo{ID: p.ID(), Name: p.Name(), IsHaram: p.IsHaram()}, nil
 }
 
 // StockReserver adapts the catalog stock repository to financing's StockReserver
@@ -104,4 +104,16 @@ func (r *ClientReader) Names(ctx context.Context, orgID string, ids []string) (m
 		}
 	}
 	return want, nil
+}
+
+// Contact returns a single client's contact details for documents.
+func (r *ClientReader) Contact(ctx context.Context, orgID, clientID string) (domain.ClientContact, error) {
+	c, err := r.clients.GetByID(ctx, orgID, clientID)
+	if err != nil {
+		if errors.Is(err, crmdomain.ErrClientNotFound) {
+			return domain.ClientContact{}, domain.ErrClientNotFound
+		}
+		return domain.ClientContact{}, err
+	}
+	return domain.ClientContact{Name: c.FullName(), Phone: c.Phone(), Document: c.Document()}, nil
 }

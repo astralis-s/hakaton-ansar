@@ -13,6 +13,7 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/portal/domain"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/apperror"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/authctx"
+	"github.com/astralis-s/hakaton-ansar/internal/platform/pdf"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/web"
 	"github.com/astralis-s/hakaton-ansar/internal/shared/money"
 )
@@ -31,6 +32,7 @@ type Handler struct {
 	browse    *app.BrowseProducts
 	submitReq *app.SubmitRequest
 	myReqs    *app.ListMyRequests
+	doc       *app.GetContractDoc
 	log       *slog.Logger
 }
 
@@ -47,6 +49,7 @@ type HandlerDeps struct {
 	Browse    *app.BrowseProducts
 	SubmitReq *app.SubmitRequest
 	MyReqs    *app.ListMyRequests
+	Doc       *app.GetContractDoc
 	Log       *slog.Logger
 }
 
@@ -54,7 +57,7 @@ func NewHandler(d HandlerDeps) *Handler {
 	return &Handler{
 		provision: d.Provision, getAccess: d.GetAccess, login: d.Login, send: d.Send,
 		listConv: d.ListConv, thread: d.Thread, profile: d.Profile, contracts: d.Contracts,
-		contract: d.Contract, browse: d.Browse, submitReq: d.SubmitReq, myReqs: d.MyReqs, log: d.Log,
+		contract: d.Contract, browse: d.Browse, submitReq: d.SubmitReq, myReqs: d.MyReqs, doc: d.Doc, log: d.Log,
 	}
 }
 
@@ -78,6 +81,7 @@ func (h *Handler) RegisterProtectedPortalRoutes(r chi.Router) {
 	r.Get("/me", h.Me)
 	r.Get("/contracts", h.MyContracts)
 	r.Get("/contracts/{id}", h.MyContract)
+	r.Get("/contracts/{id}/pdf", h.MyContractPDF)
 	r.Get("/products", h.Products)   // catalog the client may request from
 	r.Get("/requests", h.MyRequests) // the client's own requests
 	r.Post("/requests", h.SubmitRequest)
@@ -273,6 +277,21 @@ func (h *Handler) MyContract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	web.JSON(w, http.StatusOK, toContractDetailResponse(detail))
+}
+
+func (h *Handler) MyContractPDF(w http.ResponseWriter, r *http.Request) {
+	p, _ := clientFrom(r.Context())
+	doc, err := h.doc.Execute(r.Context(), p.OrgID, chi.URLParam(r, "id"), p.ClientID)
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	data, err := pdf.RenderContract(doc)
+	if err != nil {
+		apperror.Write(w, r, h.log, apperror.Internal("render contract pdf", err))
+		return
+	}
+	web.WritePDF(w, "dogovor-"+doc.Number+".pdf", data)
 }
 
 func (h *Handler) MyMessages(w http.ResponseWriter, r *http.Request) {
