@@ -438,7 +438,7 @@ textarea.input { height:auto; padding:11px 13px; min-height:80px; resize:vertica
 .chat-row.mine { justify-content:flex-end; }
 .chat-row.theirs { justify-content:flex-start; }
 .chat-bubble { max-width:min(78%, 540px); padding:12px 14px; border-radius:20px; background:var(--surface-2); border:1px solid color-mix(in srgb, var(--border) 82%, transparent); box-shadow:0 10px 28px rgba(15, 23, 42, 0.06); }
-.chat-row.mine .chat-bubble { background:var(--accent); background:linear-gradient(135deg, color-mix(in srgb, var(--accent) 82%, white 18%), color-mix(in srgb, var(--accent-strong) 90%, transparent)); border-color:transparent; color:#fff; }
+.chat-row.mine .chat-bubble { background:var(--grad); border-color:transparent; color:#fff; }
 .chat-row.mine .chat-bubble .chat-bubble-body, .chat-row.mine .chat-bubble .chat-bubble-time { color:#fff; }
 .chat-bubble-body { font-size:14px; line-height:1.52; white-space:pre-wrap; word-break:break-word; }
 .chat-bubble-time { margin-top:5px; font-size:10.5px; opacity:.72; text-align:right; }
@@ -1212,7 +1212,14 @@ textarea.input { height:auto; padding:11px 13px; min-height:80px; resize:vertica
 }
 @media (max-width:880px) {
   .shell { grid-template-columns:1fr; }
-  .sidebar { display:none; }
+  .topbar-burger { display:inline-flex; }
+  .sidebar {
+    position:fixed; top:0; left:0; bottom:0; height:100vh; z-index:70;
+    width:300px; max-width:86vw; padding:14px 12px; overflow-y:auto;
+    transform:translateX(-104%); transition:transform .26s ease; will-change:transform;
+  }
+  .shell.nav-open .sidebar { transform:translateX(0); }
+  .nav-backdrop { display:block; position:fixed; inset:0; z-index:60; background:rgba(8,12,18,.5); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); }
 }
 @media (max-width:680px) {
   .dash-panel { padding:18px; border-radius:22px; }
@@ -1272,4 +1279,33 @@ textarea.input { height:auto; padding:11px 13px; min-height:80px; resize:vertica
   .entity-inline-note { align-self:flex-start; }
   .entity-contract-side { min-width:0; width:100%; }
   .entity-progress-row { flex-direction:column; align-items:flex-start; }
+  .settings-grid { grid-template-columns:1fr; }
+  .tg-link-input { max-width:none; width:100%; }
+  .tg-link-row { width:100%; }
+  .tg-qr { margin:0 auto; }
+  .main { padding:18px 14px; }
+  .topbar { padding-left:16px; padding-right:16px; }
 }
+
+/* Telegram-бот: персональная ссылка менеджера на странице чата */
+.tg-link {
+  display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  margin-bottom:14px; padding:14px 16px; border-radius:var(--radius);
+  background:var(--accent-soft); border:1px solid var(--accent-bd); box-shadow:var(--shadow);
+}
+.tg-link-info { flex:1; min-width:240px; }
+.tg-link-title { display:flex; align-items:center; gap:8px; font-weight:700; color:var(--accent); }
+.tg-link-sub { margin-top:3px; font-size:13px; color:var(--fg-muted); line-height:1.5; }
+.tg-link-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.tg-link-input { min-width:220px; max-width:380px; background:var(--surface); font-size:13px; }
+
+/* Telegram-бот: QR + ссылка в личном кабинете (Настройки) */
+.settings-grid { grid-template-columns:1fr 1fr; }
+.tg-qr-wrap { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+.tg-qr { width:180px; height:180px; border-radius:12px; background:#fff; padding:8px; border:1px solid var(--border); flex-shrink:0; }
+.tg-qr-side { flex:1; min-width:240px; display:flex; flex-direction:column; gap:10px; }
+.tg-qr-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+/* Мобильная навигация: выезжающее меню вместо боковой панели */
+.topbar-burger { display:none; }
+.nav-backdrop { display:none; }

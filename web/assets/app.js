@@ -29,6 +29,7 @@
     var ts = useState(null), toast = ts[0], setToast = ts[1];
     var cf = useState(null), confirm = cf[0], setConfirm = cf[1];
     var meS = useState(null), me = meS[0], setMe = meS[1];
+    var nv = useState(false), navOpen = nv[0], setNavOpen = nv[1];
 
     useEffect(function () { document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('amana.theme', theme); }, [theme]);
     useEffect(function () { function onHash() { setRoute(parseHash()); window.scrollTo(0, 0); } window.addEventListener('hashchange', onHash); return function () { window.removeEventListener('hashchange', onHash); }; }, []);
@@ -36,6 +37,7 @@
       if (!authed) { setMe(null); return; }
       api.me().then(setMe).catch(function (e) { if (e.status === 401) { api.logout(); setAuthed(false); } });
     }, [authed]);
+    useEffect(function () { setNavOpen(false); }, [route.page, route.id]);
 
     function toggleTheme() { setTheme(theme === 'dark' ? 'light' : 'dark'); }
     function go(page, id) { location.hash = '#/' + page + (id ? '/' + id : ''); }
@@ -54,7 +56,7 @@
       : route.page === 'reminder' ? 'schedule'
       : route.page;
 
-    return html`<div class="shell">
+    return html`<div class=${'shell' + (navOpen ? ' nav-open' : '')}>
       <aside class="sidebar">
         <div class="sidebar-panel">
           <div class="brand">
@@ -82,6 +84,7 @@
       </aside>
       <div>
         <div class="topbar">
+          <button class="icon-btn topbar-burger" onClick=${function () { setNavOpen(true); }} aria-label="Меню"><${Icon} name="menu" size=${20}/></button>
           <div style=${{ fontWeight: 700, letterSpacing: '-.02em' }}>${me ? me.full_name : ''}
             <span style=${{ marginLeft: 8 }} class=${'chip ' + (isOwner ? 'chip-paid' : 'chip-info')}>${isOwner ? 'Владелец' : 'Менеджер'}</span></div>
           <div style=${{ flex: 1 }}></div>
@@ -91,6 +94,7 @@
         <main class="main"><${Screen} ...${ctx}/></main>
       </div>
 
+      ${navOpen ? html`<div class="nav-backdrop" onClick=${function () { setNavOpen(false); }}></div>` : null}
       ${toast ? html`<div class=${'toast ' + (toast.err ? 'err' : '')}><${Icon} name=${toast.err ? 'x' : 'check'} size=${17}/> ${toast.msg}</div>` : null}
       ${confirm ? html`<${ConfirmModal} c=${confirm} onClose=${function () { setConfirm(null); }}/>` : null}
     </div>`;

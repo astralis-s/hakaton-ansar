@@ -48,6 +48,13 @@ type StaffReplyNotifier interface {
 	StaffReplied(ctx context.Context, orgID, clientID, body string)
 }
 
+// TelegramLinkProvider builds a manager's personal Telegram bot deep link (and a
+// QR code of it) for the staff chat page / settings. Optional — when unset (bot
+// disabled), the UI simply hides it.
+type TelegramLinkProvider interface {
+	ManagerLink(ctx context.Context, orgID, managerID string) (url, qr string, available bool, err error)
+}
+
 // ClientPrincipal is the authenticated client identity carried on portal requests.
 type ClientPrincipal struct {
 	OrgID    string

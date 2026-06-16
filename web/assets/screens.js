@@ -1414,11 +1414,39 @@
   /* ================= SETTINGS ================= */
   function Settings(ctx) {
     var me = useAsync(api.me);
+    var tgLink = useAsync(api.telegramLink);
     var u = me.data || {};
+    var tg = tgLink.data;
+
+    function copyLink() {
+      var url = tg && tg.url;
+      if (!url) return;
+      var ok = function () { ctx.toast('Ссылка скопирована'); };
+      var fail = function () { ctx.toast('Не удалось скопировать — выделите вручную', true); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, fail);
+        else fail();
+      } catch (e) { fail(); }
+    }
+
     return html`<div>
       <${PageHead} title="Настройки"/>
       <${Guard} loading=${me.loading} err=${me.err}>
-        <div class="grid" style=${{ gridTemplateColumns: '1fr 1fr' }}>
+        <div class="grid settings-grid">
+          ${tg && tg.available ? html`<div class="card card-pad" style=${{ gridColumn: '1 / -1' }}>
+            <div style=${{ fontWeight: 700, marginBottom: 4 }}>Telegram-бот · ваша персональная ссылка</div>
+            <div style=${{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 14 }}>Покажите QR клиенту или отправьте ссылку. Он откроет бота, представится (ФИО и телефон) — и его сообщения придут именно вам в «Чат», а ваши ответы вернутся ему в Telegram.</div>
+            <div class="tg-qr-wrap">
+              ${tg.qr ? html`<img class="tg-qr" src=${tg.qr} alt="QR-код Telegram-бота" width="180" height="180"/>` : null}
+              <div class="tg-qr-side">
+                <input class="input tg-link-input" readonly value=${tg.url} onFocus=${function (e) { e.target.select(); }}/>
+                <div class="tg-qr-actions">
+                  <button class="btn btn-primary btn-sm" onClick=${copyLink}>Скопировать ссылку</button>
+                  <a class="btn btn-ghost btn-sm" href=${tg.url} target="_blank" rel="noopener">Открыть бота</a>
+                </div>
+              </div>
+            </div>
+          </div>` : null}
           <div class="card card-pad">
             <div style=${{ fontWeight: 700, marginBottom: 12 }}>Профиль</div>
             ${[['Имя', u.full_name], ['Email', u.email], ['Роль', u.role === 'owner' ? 'Владелец' : 'Менеджер']].map(function (r, i) {
@@ -1453,6 +1481,7 @@
   function Chat(ctx) {
     var chats = useAsync(api.listChats);
     var clients = useAsync(api.listClients);
+    var tgLink = useAsync(api.telegramLink);
     var q = useState(''), query = q[0], setQuery = q[1];
     var sel = useState(ctx.route.id || null), selId = sel[0], setSelId = sel[1];
     var convMap = {};
@@ -1488,8 +1517,32 @@
       return (c.last_sender === 'staff' ? 'Вы: ' : '') + (c.last_message || 'Без текста');
     }
 
+    function copyLink() {
+      var url = tgLink.data && tgLink.data.url;
+      if (!url) return;
+      var ok = function () { ctx.toast('Ссылка скопирована'); };
+      var fail = function () { ctx.toast('Не удалось скопировать — выделите ссылку вручную', true); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, fail);
+        else fail();
+      } catch (e) { fail(); }
+    }
+
+    var tg = tgLink.data;
+
     return html`<div>
       <${PageHead} title="Чат" sub=${activeCount ? ('Активных диалогов: ' + activeCount) : 'Внутренняя переписка с клиентами'}/>
+      ${tg && tg.available ? html`<div class="tg-link">
+          <div class="tg-link-info">
+            <div class="tg-link-title"><${Icon} name="chat" size=${15}/> Ваша ссылка на Telegram-бот</div>
+            <div class="tg-link-sub">Отправьте её клиенту: он откроет бота, представится (ФИО и телефон) — и его сообщения придут сюда, а ваши ответы вернутся ему в Telegram.</div>
+          </div>
+          <div class="tg-link-row">
+            <input class="input tg-link-input" readonly value=${tg.url} onFocus=${function (e) { e.target.select(); }}/>
+            <button class="btn btn-primary btn-sm" onClick=${copyLink}>Скопировать</button>
+            <a class="btn btn-ghost btn-sm" href=${tg.url} target="_blank" rel="noopener">Открыть</a>
+          </div>
+        </div>` : null}
       <${Guard} loading=${chats.loading || clients.loading} err=${chats.err || clients.err}>
         ${(clients.data || []).length === 0
           ? html`<div class="card"><${ui.Empty} icon="clients" title="Клиентов пока нет" text="Добавьте клиента, чтобы начать переписку."/></div>`

@@ -76,6 +76,10 @@ func (m *Module) SendMessageUseCase() *app.SendMessage { return m.send }
 // (e.g. the Telegram bot). Called from main after both modules are built.
 func (m *Module) SetStaffReplyNotifier(n domain.StaffReplyNotifier) { m.send.SetNotifier(n) }
 
+// SetTelegramLinkProvider wires the manager-deep-link provider shown on the staff
+// chat page. Called from main when the Telegram bot is enabled.
+func (m *Module) SetTelegramLinkProvider(p domain.TelegramLinkProvider) { m.handler.SetTelegramLink(p) }
+
 // RegisterStaffRoutes mounts staff chat + portal-access routes (JWT /api/app).
 func (m *Module) RegisterStaffRoutes(r chi.Router) { m.handler.RegisterStaffRoutes(r) }
 
@@ -83,4 +87,6 @@ func (m *Module) RegisterStaffRoutes(r chi.Router) { m.handler.RegisterStaffRout
 func (m *Module) RegisterPublicPortalRoutes(r chi.Router) { m.handler.RegisterPublicPortalRoutes(r) }
 
 // RegisterProtectedPortalRoutes mounts the client-JWT-protected portal routes.
-func (m *Module) RegisterProtectedPortalRoutes(r chi.Router) { m.handler.RegisterProtectedPortalRoutes(r) }
+func (m *Module) RegisterProtectedPortalRoutes(r chi.Router) {
+	m.handler.RegisterProtectedPortalRoutes(r)
+}

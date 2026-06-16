@@ -39,6 +39,7 @@ type Module struct {
 	repo            *infra.UserRepository
 	messenger       *infra.Messenger
 	notifier        *infra.StaffNotifier
+	linkProvider    *infra.LinkProvider
 	clients         domain.ClientDirectory
 	inbox           domain.ChatInbox
 	tx              domain.TxManager
@@ -52,6 +53,7 @@ func New(d Deps) *Module {
 	repo := infra.NewUserRepository(d.Pool)
 	messenger := infra.NewMessenger(client)
 	deliver := app.NewDeliverStaffReply(repo, messenger, d.Log)
+	linkProvider := infra.NewLinkProvider(app.NewManagerLink(infra.NewBotIdentity(client)))
 
 	return &Module{
 		client:          client,
@@ -59,6 +61,7 @@ func New(d Deps) *Module {
 		repo:            repo,
 		messenger:       messenger,
 		notifier:        infra.NewStaffNotifier(deliver),
+		linkProvider:    linkProvider,
 		clients:         d.Clients,
 		inbox:           d.Inbox,
 		tx:              d.Tx,
@@ -70,6 +73,10 @@ func New(d Deps) *Module {
 // Notifier returns the portal StaffReplyNotifier that delivers manager replies to
 // Telegram. Wire it into the portal module so staff replies reach the bot.
 func (m *Module) Notifier() portaldomain.StaffReplyNotifier { return m.notifier }
+
+// LinkProvider returns the portal TelegramLinkProvider that builds each manager's
+// personal bot deep link for the staff chat page.
+func (m *Module) LinkProvider() portaldomain.TelegramLinkProvider { return m.linkProvider }
 
 // Run validates the token, resolves the organization and long-polls Telegram
 // until ctx is cancelled. Intended to be launched in its own goroutine.
