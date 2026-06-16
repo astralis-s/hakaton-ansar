@@ -39,6 +39,14 @@ type Hasher interface {
 	Compare(hash, password string) bool
 }
 
+// StaffReplyNotifier is notified after a staff reply has been persisted, so an
+// external channel (e.g. the Telegram bot) can deliver it to the client.
+// Best-effort: implementations handle their own errors and must not block for
+// long. Optional — when unset, replies are simply not forwarded anywhere.
+type StaffReplyNotifier interface {
+	StaffReplied(ctx context.Context, orgID, clientID, body string)
+}
+
 // ClientPrincipal is the authenticated client identity carried on portal requests.
 type ClientPrincipal struct {
 	OrgID    string

@@ -66,3 +66,11 @@ sql:
       go:
         <<: *gen
         out: internal/modules/portal/infra/sqlcgen
+  - name: telegrambot
+    engine: postgresql
+    schema: migrations
+    queries: internal/modules/telegrambot/infra/queries
+    gen:
+      go:
+        <<: *gen
+        out: internal/modules/telegrambot/infra/sqlcgen
