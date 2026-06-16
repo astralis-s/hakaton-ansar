@@ -40,11 +40,6 @@ type registerPaymentRequest struct {
 	Amount string `json:"amount" validate:"required"`
 }
 
-type accrueCharityRequest struct {
-	Amount string `json:"amount" validate:"required"`
-	Note   string `json:"note"`
-}
-
 // --- Responses --------------------------------------------------------------
 
 type installmentDTO struct {
@@ -112,22 +107,6 @@ type contractSummaryDTO struct {
 	ProgressPercent string    `json:"progress_percent"`
 	Status          string    `json:"status"`
 	CreatedAt       time.Time `json:"created_at"`
-}
-
-type charityEntryDTO struct {
-	ID         string    `json:"id"`
-	ContractID string    `json:"contract_id"`
-	ClientID   string    `json:"client_id"`
-	Amount     string    `json:"amount"`
-	Status     string    `json:"status"`
-	Note       string    `json:"note"`
-	CreatedBy  string    `json:"created_by"`
-	CreatedAt  time.Time `json:"created_at"`
-}
-
-type charityListResponse struct {
-	Entries     []charityEntryDTO `json:"entries"`
-	TotalAmount string            `json:"total_amount"`
 }
 
 // --- Mappers ----------------------------------------------------------------
@@ -216,18 +195,5 @@ func toContractSummaryDTO(s domain.ContractSummary) contractSummaryDTO {
 		ProgressPercent: progress,
 		Status:          s.Status.String(),
 		CreatedAt:       s.CreatedAt,
-	}
-}
-
-func toCharityEntryDTO(e domain.CharityEntry) charityEntryDTO {
-	return charityEntryDTO{
-		ID:         e.ID(),
-		ContractID: e.ContractID(),
-		ClientID:   e.ClientID(),
-		Amount:     e.Amount().String(),
-		Status:     string(e.Status()),
-		Note:       e.Note(),
-		CreatedBy:  e.CreatedBy(),
-		CreatedAt:  e.CreatedAt(),
 	}
 }

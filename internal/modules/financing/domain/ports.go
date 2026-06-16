@@ -34,12 +34,6 @@ type ContractRepository interface {
 	AddPayment(ctx context.Context, contractID string, p Payment) error
 }
 
-// CharityRepository persists the sadaqa registry.
-type CharityRepository interface {
-	Create(ctx context.Context, e CharityEntry) (CharityEntry, error)
-	ListByOrg(ctx context.Context, orgID string) ([]CharityEntry, error)
-}
-
 // ProductInfo is the minimal product data financing needs to gate contract
 // creation (it must refuse haram products).
 type ProductInfo struct {

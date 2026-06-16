@@ -11,12 +11,10 @@ import (
 )
 
 type Querier interface {
-	CreateCharityEntry(ctx context.Context, arg CreateCharityEntryParams) (CharityEntry, error)
 	CreateContract(ctx context.Context, arg CreateContractParams) error
 	CreateInstallment(ctx context.Context, arg CreateInstallmentParams) error
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) error
 	GetContractByID(ctx context.Context, arg GetContractByIDParams) (Contract, error)
-	ListCharityByOrg(ctx context.Context, orgID pgtype.UUID) ([]CharityEntry, error)
 	ListContractsByOrg(ctx context.Context, orgID pgtype.UUID) ([]Contract, error)
 	ListInstallmentsByContract(ctx context.Context, contractID pgtype.UUID) ([]Installment, error)
 	ListPaymentsByContract(ctx context.Context, contractID pgtype.UUID) ([]Payment, error)

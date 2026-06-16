@@ -18,18 +18,6 @@ type ApiKey struct {
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 }
 
-type CharityEntry struct {
-	ID         pgtype.UUID        `json:"id"`
-	OrgID      pgtype.UUID        `json:"org_id"`
-	ContractID pgtype.UUID        `json:"contract_id"`
-	ClientID   pgtype.UUID        `json:"client_id"`
-	Amount     pgtype.Numeric     `json:"amount"`
-	Status     string             `json:"status"`
-	Note       string             `json:"note"`
-	CreatedBy  pgtype.UUID        `json:"created_by"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-}
-
 type Client struct {
 	ID        pgtype.UUID        `json:"id"`
 	OrgID     pgtype.UUID        `json:"org_id"`
@@ -104,6 +92,9 @@ type Reminder struct {
 	WasShifted      bool               `json:"was_shifted"`
 	Reason          string             `json:"reason"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	Status          string             `json:"status"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt     pgtype.Timestamptz `json:"cancelled_at"`
 }
 
 type User struct {

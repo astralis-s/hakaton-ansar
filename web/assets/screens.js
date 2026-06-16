@@ -41,7 +41,6 @@
   function Dashboard(ctx) {
     var dash = useAsync(api.dashboard);     // overdue + week + portfolio (one source)
     var rem = useAsync(api.listReminders);  // today's agenda (separate source)
-    var charity = useAsync(api.listCharity);
     var qp = useState(false), quickPay = qp[0], setQuickPay = qp[1];
     var cm = useState(false), clientOpen = cm[0], setClientOpen = cm[1];
     var ab = useState({}), agendaBusy = ab[0], setAgendaBusy = ab[1];
@@ -105,7 +104,6 @@
     }
 
     var rate = weekRate(d);
-    var charityTotal = charity.data ? fmt.money(charity.data.total_amount) : '—';
 
     return html`<div>
       ${head}
@@ -224,10 +222,6 @@
                   <div class="dash-portfolio-value amana-num">${fmt.money(d.portfolio.outstanding)}</div>
                   <div class="dash-portfolio-contracts amana-num">${d.portfolio.active_contracts}</div>
                   <div class="dash-portfolio-contracts-note">${plural(d.portfolio.active_contracts, 'активный договор', 'активных договора', 'активных договоров')}</div>
-                </div>
-                <div class="dash-portfolio-meta">
-                  <div class="dash-portfolio-meta-label">Собрано садака</div>
-                  <div class="dash-portfolio-meta-value amana-num">${charity.loading ? '…' : charityTotal}</div>
                 </div>
                 <div class="dash-ops-title">Быстрые действия</div>
                 <div class="dash-ops-actions dash-ops-actions-grid">
@@ -835,7 +829,6 @@
     var st = useAsync(function () { return api.getContract(ctx.route.id); }, [ctx.route.id]);
     var tabS = useState('schedule'), tab = tabS[0], setTab = tabS[1];
     var payS = useState(null), payOpen = payS[0], setPayOpen = payS[1];
-    var sdS = useState(false), sdOpen = sdS[0], setSdOpen = sdS[1];
     var c = st.data;
     function reloadToast(msg) { return function () { st.reload(); ctx.toast(msg); }; }
     function doSettle() {
@@ -853,9 +846,8 @@
       </div>
       <${Guard} loading=${st.loading} err=${st.err}>
         ${c ? html`<div>
-          ${c.has_overdue ? html`<div class="banner banner-warn" style=${{ marginBottom: 16, justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style=${{ display: 'flex', gap: 10 }}><${Icon} name="clock" size=${18}/><div><b>Есть просрочка.</b> Долг не растёт — можно начислить фиксированную садаку.</div></div>
-            ${ctx.isOwner ? html`<button class="btn btn-sm" style=${{ background: 'var(--st-over-fg)', color: '#fff' }} onClick=${function () { setSdOpen(true); }}>Начислить садаку</button>` : null}
+          ${c.has_overdue ? html`<div class="banner banner-warn" style=${{ marginBottom: 16 }}>
+            <${Icon} name="clock" size=${18}/><div><b>Есть просрочка.</b> Долг не растёт со временем — сумма обязательства зафиксирована при создании.</div>
           </div>` : null}
           <div class="card card-pad" style=${{ marginBottom: 16 }}>
             <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
@@ -900,7 +892,6 @@
         </div>` : null}
       <//>
       ${payOpen ? html`<${PaymentModal} c=${c} onClose=${function () { setPayOpen(null); }} onDone=${function () { setPayOpen(null); st.reload(); ctx.toast('Платёж принят'); }} ctx=${ctx}/>` : null}
-      ${sdOpen ? html`<${SadaqaModal} c=${c} onClose=${function () { setSdOpen(false); }} onDone=${function () { setSdOpen(false); st.reload(); ctx.toast('Садака начислена'); }} ctx=${ctx}/>` : null}
     </div>`;
   }
   function PaymentModal(p) {
@@ -923,23 +914,6 @@
         <button class="btn btn-soft btn-sm" onClick=${function () { setAmount(p.c.outstanding); }}>Весь остаток</button>
       </div>
       <button class="btn btn-primary btn-block" disabled=${busy} onClick=${pay}>${busy ? html`<${ui.Spinner}/>` : 'Принять платёж'}</button>
-    <//>`;
-  }
-  function SadaqaModal(p) {
-    var a = useState('500'), amount = a[0], setAmount = a[1];
-    var nt = useState('Просрочка платежа'), note = nt[0], setNote = nt[1];
-    var b = useState(false), busy = b[0], setBusy = b[1];
-    function go() {
-      var n = parseFloat(String(amount).replace(',', '.'));
-      if (!(n > 0)) { p.ctx.toast('Введите сумму', true); return; }
-      setBusy(true);
-      api.accrueCharity(p.c.id, String(amount).replace(',', '.'), note.trim()).then(p.onDone).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
-    }
-    return html`<${ui.Modal} title="Начислить садаку" onClose=${p.onClose}>
-      <div class="banner banner-accent" style=${{ fontSize: 13 }}><${Icon} name="charity" size=${17}/> Фиксированный сбор уходит в реестр благотворительности и <b>не меняет долг</b>.</div>
-      <${ui.Field} label="Сумма, ₽"><input class="input" value=${amount} onInput=${function (e) { setAmount(e.target.value); }}/><//>
-      <${ui.Field} label="Комментарий"><input class="input" value=${note} onInput=${function (e) { setNote(e.target.value); }}/><//>
-      <button class="btn btn-primary btn-block" disabled=${busy} onClick=${go}>${busy ? html`<${ui.Spinner}/>` : 'Начислить'}</button>
     <//>`;
   }
 
@@ -1315,30 +1289,6 @@
     </div>`;
   }
 
-  /* ================= CHARITY ================= */
-  function Charity(ctx) {
-    var st = useAsync(api.listCharity);
-    var d = st.data || { entries: [], total_amount: '0' };
-    return html`<div>
-      <${PageHead} title="Реестр садаки" sub="Прозрачность благотворительных сборов"/>
-      <${Guard} loading=${st.loading} err=${st.err}>
-        <div class="card card-pad" style=${{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div class="kpi"><div class="v amana-num grad-text">${fmt.money(d.total_amount)}</div><div class="l">Всего собрано садаки</div></div>
-          <span style=${{ width: 48, height: 48, borderRadius: 14, background: 'var(--sd-bg)', color: 'var(--sd-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><${Icon} name="charity" size=${24}/></span>
-        </div>
-        ${d.entries.length === 0 ? html`<div class="card"><${ui.Empty} icon="charity" title="Записей нет" text="Сборы появятся при начислении садаки по просрочке"/></div>`
-          : html`<div class="card" style=${{ overflow: 'hidden' }}><table class="table"><thead><tr><th>Дата</th><th>Договор</th><th>Сумма</th><th>Статус</th></tr></thead>
-            <tbody>${d.entries.map(function (e) {
-              return html`<tr key=${e.id}>
-                <td>${fmt.date(e.created_at)}</td>
-                <td style=${{ fontFamily: 'monospace', fontSize: 12.5, color: 'var(--fg-muted)' }}>${e.contract_id.slice(0, 8)}</td>
-                <td class="amana-num" style=${{ fontWeight: 600 }}>${fmt.money(e.amount)}</td>
-                <td><span class="chip chip-sd">${ui.labels.charityStatus[e.status] || e.status}</span></td></tr>`;
-            })}</tbody></table></div>`}
-      <//>
-    </div>`;
-  }
-
   /* ================= DEVELOPERS (API KEYS) ================= */
   function Developers(ctx) {
     if (!ctx.isOwner) return html`<div class="card"><${ui.Empty} icon="shield" title="Доступ только для владельца"/></div>`;
@@ -1426,6 +1376,6 @@
   }
 
   AM.screens = { dashboard: Dashboard, clients: Clients, client: ClientCard, catalog: Catalog, product: ProductCard, contracts: Contracts, reminder: ReminderCard,
-    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule, charity: Charity,
+    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule,
     developers: Developers, settings: Settings };
 })();

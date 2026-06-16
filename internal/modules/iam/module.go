@@ -43,9 +43,11 @@ func New(d Deps) *Module {
 	tokens := infra.NewJWTService(d.JWTSecret, d.JWTTTL)
 
 	authKeyUC := app.NewAuthenticateApiKey(keyRepo)
+	registerUC := app.NewRegisterOrganization(orgRepo, userRepo, hasher, d.Tx)
 
 	handler := iamhttp.NewHandler(iamhttp.HandlerDeps{
-		Setup:      app.NewSetupOrganization(orgRepo, userRepo, hasher, d.Tx),
+		Setup:      app.NewSetupOrganization(orgRepo, registerUC),
+		Register:   registerUC,
 		Login:      app.NewLogin(userRepo, hasher, tokens),
 		CreateUser: app.NewCreateUser(userRepo, hasher),
 		ListUsers:  app.NewListUsers(userRepo),
@@ -71,13 +73,14 @@ func (m *Module) JWTMiddleware() func(http.Handler) http.Handler { return m.jwtM
 func (m *Module) APIKeyMiddleware() func(http.Handler) http.Handler { return m.apiKeyMW }
 
 // OwnerMiddleware rejects non-owner principals (403). Other modules use it to
-// gate owner-only actions (e.g. cancel contract, accrue charity).
+// gate owner-only actions (e.g. cancel contract).
 func (m *Module) OwnerMiddleware() func(http.Handler) http.Handler { return m.ownerMW }
 
 // RegisterPublicAppRoutes mounts unauthenticated /api/app routes.
 func (m *Module) RegisterPublicAppRoutes(r chi.Router) {
 	r.Post("/auth/login", m.handler.Login)
-	r.Post("/setup", m.handler.Setup)
+	r.Post("/auth/register", m.handler.Register) // multi-tenant sign-up
+	r.Post("/setup", m.handler.Setup)            // first-run alias
 }
 
 // RegisterProtectedAppRoutes mounts JWT-protected /api/app routes. The caller

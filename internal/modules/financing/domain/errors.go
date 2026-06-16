@@ -25,9 +25,6 @@ var (
 	ErrPaymentExceedsOutstanding = errors.New("payment exceeds outstanding balance")
 	ErrAlreadySettled            = errors.New("contract is already settled")
 
-	// Charity.
-	ErrCharityAmountNotPositive = errors.New("charity amount must be positive")
-
 	// Lookups / cross-module.
 	ErrContractNotFound = errors.New("contract not found")
 	ErrProductNotFound  = errors.New("product not found")

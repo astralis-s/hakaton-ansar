@@ -27,8 +27,6 @@ type Handler struct {
 	pay       *app.RegisterPayment
 	settle    *app.SettleEarly
 	cancel    *app.CancelContract
-	accrue    *app.AccrueLateCharity
-	charity   *app.ListCharity
 	dashboard *app.Dashboard
 	log       *slog.Logger
 	ownerMW   func(http.Handler) http.Handler
@@ -36,25 +34,23 @@ type Handler struct {
 
 // HandlerDeps groups the use-cases for NewHandler.
 type HandlerDeps struct {
-	Preview     *app.PreviewContract
-	Create      *app.CreateContract
-	Get         *app.GetContract
-	List        *app.ListContracts
-	Pay         *app.RegisterPayment
-	Settle      *app.SettleEarly
-	Cancel      *app.CancelContract
-	Accrue      *app.AccrueLateCharity
-	ListCharity *app.ListCharity
-	Dashboard   *app.Dashboard
-	Log         *slog.Logger
-	OwnerOnly   func(http.Handler) http.Handler
+	Preview   *app.PreviewContract
+	Create    *app.CreateContract
+	Get       *app.GetContract
+	List      *app.ListContracts
+	Pay       *app.RegisterPayment
+	Settle    *app.SettleEarly
+	Cancel    *app.CancelContract
+	Dashboard *app.Dashboard
+	Log       *slog.Logger
+	OwnerOnly func(http.Handler) http.Handler
 }
 
 func NewHandler(d HandlerDeps) *Handler {
 	return &Handler{
 		preview: d.Preview, create: d.Create, get: d.Get, list: d.List,
-		pay: d.Pay, settle: d.Settle, cancel: d.Cancel, accrue: d.Accrue,
-		charity: d.ListCharity, dashboard: d.Dashboard, log: d.Log, ownerMW: d.OwnerOnly,
+		pay: d.Pay, settle: d.Settle, cancel: d.Cancel,
+		dashboard: d.Dashboard, log: d.Log, ownerMW: d.OwnerOnly,
 	}
 }
 
@@ -69,9 +65,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		cr.Post("/{id}/payments", h.RegisterPayment)
 		cr.Post("/{id}/settle", h.SettleEarly)
 		cr.With(h.ownerMW).Post("/{id}/cancel", h.Cancel)
-		cr.With(h.ownerMW).Post("/{id}/charity", h.AccrueCharity) // owner-only
 	})
-	r.Get("/charity", h.ListCharity) // registry view (both roles)
 }
 
 // Dashboard returns the aggregated owner/manager dashboard.
@@ -197,45 +191,6 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 	web.JSON(w, http.StatusOK, toContractResponse(contract, time.Now()))
 }
 
-func (h *Handler) AccrueCharity(w http.ResponseWriter, r *http.Request) {
-	p, _ := authctx.From(r.Context())
-	var req accrueCharityRequest
-	if err := web.DecodeAndValidate(w, r, &req); err != nil {
-		apperror.Write(w, r, h.log, err)
-		return
-	}
-	amount, err := money.FromString(req.Amount, money.DefaultCurrency)
-	if err != nil {
-		apperror.Write(w, r, h.log, apperror.Invalid("invalid_amount", "amount must be a decimal string"))
-		return
-	}
-	entry, err := h.accrue.Execute(r.Context(), app.AccrueLateCharityInput{
-		OrgID: p.OrgID, ContractID: chi.URLParam(r, "id"),
-		Amount: amount, Note: req.Note, CreatedBy: p.UserID,
-	})
-	if err != nil {
-		apperror.Write(w, r, h.log, mapError(err))
-		return
-	}
-	web.JSON(w, http.StatusCreated, toCharityEntryDTO(entry))
-}
-
-func (h *Handler) ListCharity(w http.ResponseWriter, r *http.Request) {
-	p, _ := authctx.From(r.Context())
-	entries, err := h.charity.Execute(r.Context(), p.OrgID)
-	if err != nil {
-		apperror.Write(w, r, h.log, mapError(err))
-		return
-	}
-	dtos := make([]charityEntryDTO, 0, len(entries))
-	total := money.Zero(money.DefaultCurrency)
-	for _, e := range entries {
-		dtos = append(dtos, toCharityEntryDTO(e))
-		total, _ = total.Add(e.Amount())
-	}
-	web.JSON(w, http.StatusOK, charityListResponse{Entries: dtos, TotalAmount: total.String()})
-}
-
 // parseTerms converts the raw request strings into domain value objects. Markup
 // is supplied as an amount OR a percent of the cost (exactly one).
 func parseTerms(costStr, markupAmountStr, markupPercentStr, downStr, cadenceStr, startStr string) (cost money.Money, markup domain.Markup, down money.Money, cadence domain.Cadence, start time.Time, err error) {
@@ -313,7 +268,6 @@ func mapError(err error) error {
 		return apperror.Conflict("invalid_state", err.Error())
 	case errors.Is(err, domain.ErrPaymentExceedsOutstanding),
 		errors.Is(err, domain.ErrPaymentNotPositive),
-		errors.Is(err, domain.ErrCharityAmountNotPositive),
 		errors.Is(err, domain.ErrDownPaymentTooLarge),
 		errors.Is(err, domain.ErrDownPaymentNegative),
 		errors.Is(err, domain.ErrInstallmentsNotPositive),

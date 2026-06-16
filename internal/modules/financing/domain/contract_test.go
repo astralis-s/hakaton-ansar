@@ -179,20 +179,7 @@ func TestOverdue_DoesNotChangeDebt(t *testing.T) {
 	assert.Equal(t, "90000.00", c.Outstanding().String())
 }
 
-// 8. Late charge is sadaqa — separate from the contract, not in Outstanding.
-func TestLateCharity_SeparateFromDebt(t *testing.T) {
-	c := activeContract(t, baseParams(t))
-	outstandingBefore := c.Outstanding().String()
-
-	entry, err := NewCharityEntry("ch1", "o1", c.ID(), c.ClientID(), rub(t, "500.00"), "late payment", "owner-1")
-	require.NoError(t, err)
-
-	assert.Equal(t, "500.00", entry.Amount().String())
-	assert.Equal(t, CharityPending, entry.Status())
-	// the debt is untouched by accruing charity
-	assert.Equal(t, outstandingBefore, c.Outstanding().String())
-	assert.Equal(t, "90000.00", c.Outstanding().String())
-}
+// 8. Overdue never changes the debt (anti-riba; covered by TestOverdue_DoesNotChangeDebt).
 
 // 9. Early settlement clears the balance with no penalty.
 func TestSettleEarly_NoPenalty(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 // HandlerDeps groups the use-cases a Handler needs.
 type HandlerDeps struct {
 	Setup      *app.SetupOrganization
+	Register   *app.RegisterOrganization
 	Login      *app.Login
 	CreateUser *app.CreateUser
 	ListUsers  *app.ListUsers
@@ -23,6 +24,7 @@ type HandlerDeps struct {
 func NewHandler(d HandlerDeps) *Handler {
 	return &Handler{
 		setup:      d.Setup,
+		register:   d.Register,
 		login:      d.Login,
 		createUser: d.CreateUser,
 		listUsers:  d.ListUsers,

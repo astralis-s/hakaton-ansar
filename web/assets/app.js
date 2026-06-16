@@ -10,7 +10,6 @@
     ['catalog', 'Каталог', 'catalog'],
     ['contracts', 'Договоры', 'contracts'],
     ['schedule', 'Календарь', 'calendar'],
-    ['charity', 'Садака', 'charity'],
     ['developers', 'Разработчикам', 'code', true],
     ['settings', 'Настройки', 'settings'],
   ];

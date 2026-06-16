@@ -18,7 +18,7 @@ import (
 
 // Deps are the external dependencies of the financing module. Products/Clients
 // are cross-context reader ports (wired from catalog/crm in main); OwnerOnly is
-// the middleware gating owner-only actions (cancel, charity accrual).
+// the middleware gating owner-only actions (cancel).
 type Deps struct {
 	Pool                  *pgxpool.Pool
 	Tx                    domain.TxManager
@@ -39,24 +39,21 @@ type Module struct {
 // New wires the financing module.
 func New(d Deps) *Module {
 	contracts := infra.NewContractRepository(d.Pool)
-	charity := infra.NewCharityRepository(d.Pool)
 
 	createContract := app.NewCreateContract(contracts, d.Products, d.Clients, d.Tx)
 	getContract := app.NewGetContract(contracts)
 
 	handler := financinghttp.NewHandler(financinghttp.HandlerDeps{
-		Preview:     app.NewPreviewContract(d.ComparisonRatePercent),
-		Create:      createContract,
-		Get:         getContract,
-		List:        app.NewListContracts(contracts),
-		Pay:         app.NewRegisterPayment(contracts, d.Tx),
-		Settle:      app.NewSettleEarly(contracts, d.Tx),
-		Cancel:      app.NewCancelContract(contracts, d.Tx),
-		Accrue:      app.NewAccrueLateCharity(contracts, charity),
-		ListCharity: app.NewListCharity(charity),
-		Dashboard:   app.NewDashboard(contracts, d.Clients),
-		Log:         d.Log,
-		OwnerOnly:   d.OwnerOnly,
+		Preview:   app.NewPreviewContract(d.ComparisonRatePercent),
+		Create:    createContract,
+		Get:       getContract,
+		List:      app.NewListContracts(contracts),
+		Pay:       app.NewRegisterPayment(contracts, d.Tx),
+		Settle:    app.NewSettleEarly(contracts, d.Tx),
+		Cancel:    app.NewCancelContract(contracts, d.Tx),
+		Dashboard: app.NewDashboard(contracts, d.Clients),
+		Log:       d.Log,
+		OwnerOnly: d.OwnerOnly,
 	})
 	return &Module{handler: handler, createContract: createContract, getContract: getContract}
 }

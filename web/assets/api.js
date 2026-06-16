@@ -42,6 +42,7 @@
     logout: function () { setToken(''); },
 
     setup: function (p) { return request('POST', '/setup', p); },
+    register: function (p) { return request('POST', '/auth/register', p); },
     login: async function (email, password) {
       var r = await request('POST', '/auth/login', { email: email, password: password });
       if (r && r.token) setToken(r.token);
@@ -67,8 +68,6 @@
     registerPayment: function (id, amount) { return request('POST', '/contracts/' + id + '/payments', { amount: amount }); },
     settleContract: function (id) { return request('POST', '/contracts/' + id + '/settle'); },
     cancelContract: function (id) { return request('POST', '/contracts/' + id + '/cancel'); },
-    accrueCharity: function (id, amount, note) { return request('POST', '/contracts/' + id + '/charity', { amount: amount, note: note }); },
-    listCharity: function () { return request('GET', '/charity'); },
 
     listReminders: function () { return request('GET', '/schedule/reminders'); },
     getReminder: function (id) { return request('GET', '/schedule/reminders/' + id); },

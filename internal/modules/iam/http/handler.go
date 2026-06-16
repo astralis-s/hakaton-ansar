@@ -17,6 +17,7 @@ import (
 // Handler holds the iam use-cases and maps DTO ↔ domain.
 type Handler struct {
 	setup      *app.SetupOrganization
+	register   *app.RegisterOrganization
 	login      *app.Login
 	createUser *app.CreateUser
 	listUsers  *app.ListUsers
@@ -34,6 +35,31 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := h.setup.Execute(r.Context(), app.SetupInput{
+		OrgName:       req.OrgName,
+		Currency:      req.Currency,
+		OwnerName:     req.OwnerName,
+		OwnerEmail:    req.OwnerEmail,
+		OwnerPassword: req.OwnerPassword,
+	})
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusCreated, setupResponse{
+		Organization: toOrganizationResponse(out.Org),
+		Owner:        toUserResponse(out.Owner),
+	})
+}
+
+// Register creates a new organization with its owner (multi-tenant sign-up). It
+// works at any time (Amana is multi-organization), unlike first-run Setup.
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	var req setupRequest
+	if err := web.DecodeAndValidate(w, r, &req); err != nil {
+		apperror.Write(w, r, h.log, err)
+		return
+	}
+	out, err := h.register.Execute(r.Context(), app.RegisterInput{
 		OrgName:       req.OrgName,
 		Currency:      req.Currency,
 		OwnerName:     req.OwnerName,

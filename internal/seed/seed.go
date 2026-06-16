@@ -66,7 +66,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 	productRepo := cataloginfra.NewProductRepository(pool)
 	clientRepo := crminfra.NewClientRepository(pool)
 	contractRepo := financinginfra.NewContractRepository(pool)
-	charityRepo := financinginfra.NewCharityRepository(pool)
 	reminderRepo := schedulinginfra.NewReminderRepository(pool)
 	tx := database.NewTxManager(pool)
 
@@ -154,7 +153,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 	productReader := financinginfra.NewProductReader(productRepo)
 	clientReader := financinginfra.NewClientReader(clientRepo)
 	createUC := financingapp.NewCreateContract(contractRepo, productReader, clientReader, tx)
-	charityUC := financingapp.NewAccrueLateCharity(contractRepo, charityRepo)
 
 	now := time.Now()
 
@@ -167,8 +165,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		down             string
 		startDate        time.Time
 		paidInstallments int
-		charityAmount    string
-		charityNote      string
 	}
 	seeds := []contractSeed{
 		{
@@ -190,8 +186,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 			down:             "18000.00",
 			startDate:        weekDate(now, time.Wednesday).AddDate(0, 0, -8*7),
 			paidInstallments: 7,
-			charityAmount:    "500.00",
-			charityNote:      "Просрочка платежа — садака на благотворительность",
 		},
 		{
 			label:            "contract adam 3",
@@ -254,17 +248,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 
 		if err := seedHistoricInstallmentPayments(ctx, tx, contractRepo, contract, s.paidInstallments); err != nil {
 			return seedErr(s.label+" payments", err)
-		}
-		if s.charityAmount != "" {
-			if _, err := charityUC.Execute(ctx, financingapp.AccrueLateCharityInput{
-				OrgID:      org.ID(),
-				ContractID: contract.ID(),
-				Amount:     rub(s.charityAmount),
-				Note:       s.charityNote,
-				CreatedBy:  owner.ID(),
-			}); err != nil {
-				return seedErr(s.label+" charity", err)
-			}
 		}
 		seededContracts = append(seededContracts, contract)
 	}

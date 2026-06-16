@@ -93,7 +93,7 @@
   var FEATURES = [
     { ico: 'shield', t: 'Мурабаха без рибы', d: 'Цена фиксируется один раз как «себестоимость + наценка». Долг не растёт со временем — никакого процента и капитализации.' },
     { ico: 'moon2', t: 'Планировщик с намазом', d: 'Звонки и доставки автоматически сдвигаются мимо пяти молитв и пятничного джума. Система объясняет, почему перенесла.' },
-    { ico: 'charity', t: 'Садака вместо пени', d: 'Штраф за просрочку — фиксированная садака в отдельный реестр благотворительности. Не в выручку и не в долг клиента.' },
+    { ico: 'coins', t: 'Доход и склад', d: 'Учёт прихода и расхода, прибыль по проданным товарам и остатки на складе — всё в одном месте.' },
     { ico: 'star', t: 'Халяль-статус товара', d: 'Каждому товару присвоен статус: халяль, харам или сомнительно. На «харам» договор оформить нельзя.' },
     { ico: 'code', t: 'Публичный API', d: 'Внешние маркетплейсы создают договоры и читают статусы платежей через API-ключ. Документация — в Swagger.' },
     { ico: 'trend', t: 'Прозрачный график', d: 'Равные доли с детерминированным округлением до копейки. Сравнение «без рибы vs кредит» прямо в мастере договора.' },
@@ -117,13 +117,14 @@
       var done = function () { setBusy(false); p.onAuthed(); };
       var fail = function (ex) {
         setBusy(false);
-        if (ex.code === 'already_initialized') { setErr('Организация уже создана — войдите в систему.'); setMode('login'); return; }
+        if (ex.code === 'email_taken') { setErr('Этот email уже зарегистрирован — войдите в систему.'); setMode('login'); return; }
+        if (ex.code === 'invalid_credentials') { setErr('Неверный email или пароль.'); return; }
         setErr(ex.message || 'Не удалось выполнить запрос.');
       };
       if (mode === 'login') {
         AM.api.login(login.email.trim(), login.password).then(done).catch(fail);
       } else {
-        AM.api.setup({
+        AM.api.register({
           org_name: reg.org_name.trim(), currency: 'RUB',
           owner_name: reg.owner_name.trim(), owner_email: reg.owner_email.trim(), owner_password: reg.owner_password,
         }).then(function () { return AM.api.login(reg.owner_email.trim(), reg.owner_password); }).then(done).catch(fail);
@@ -183,7 +184,7 @@
           <div class="eyebrow"><span class="dot"></span>БЕЗ РИБЫ · МОДЕЛЬ МУРАБАХА</div>
           <h1>Рассрочка без процента — <span class="grad-text">честно</span> и прозрачно</h1>
           <p class="lead">CRM для продаж в рассрочку по исламской модели: фиксированная наценка, понятный график платежей,
-            планирование задач мимо времён намаза и прозрачный реестр садаки. Долг <b style=${{ color: 'var(--fg)' }}>не растёт</b> со временем.</p>
+            планирование задач мимо времён намаза, склад и учёт прибыли. Долг <b style=${{ color: 'var(--fg)' }}>не растёт</b> со временем.</p>
           <div style=${{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <button class="btn btn-primary btn-lg" onClick=${open}>Начать бесплатно <${Icon} name="arrow" size=${19}/></button>
             <button class="btn btn-ghost btn-lg" onClick=${function () { scrollTo('#how'); }}>Как это работает</button>
