@@ -42,6 +42,11 @@ type accessResponse struct {
 	Email     string `json:"email"`
 }
 
+type telegramLinkResponse struct {
+	Available bool   `json:"available"`
+	URL       string `json:"url,omitempty"`
+}
+
 type messageResponse struct {
 	ID         string    `json:"id"`
 	SenderKind string    `json:"sender_kind"`

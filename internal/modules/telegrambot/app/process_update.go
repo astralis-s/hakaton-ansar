@@ -58,19 +58,20 @@ func NewProcessUpdate(repo domain.UserRepository, clients domain.ClientDirectory
 // friendly notice is sent to the user; the poller loop never fails on one update.
 func (uc *ProcessUpdate) HandleMessage(ctx context.Context, in IncomingMessage) {
 	text := strings.TrimSpace(in.Text)
+	payload, isStart := startPayload(text)
 
 	user, err := uc.repo.GetByChatID(ctx, in.ChatID)
 	switch {
 	case errors.Is(err, domain.ErrUserNotFound):
-		uc.begin(ctx, in)
+		uc.begin(ctx, in, payload)
 		return
 	case err != nil:
 		uc.log.Error("load telegram user", "error", err, "chat_id", in.ChatID)
 		return
 	}
 
-	if text == "/start" {
-		uc.handleStart(ctx, &user, in)
+	if isStart {
+		uc.handleStart(ctx, &user, in, payload)
 		return
 	}
 
@@ -86,7 +87,19 @@ func (uc *ProcessUpdate) HandleMessage(ctx context.Context, in IncomingMessage) 
 	}
 }
 
-func (uc *ProcessUpdate) begin(ctx context.Context, in IncomingMessage) {
+// startPayload reports whether text is a /start command and returns its optional
+// deep-link payload (the part after "/start ", e.g. a manager's personal link).
+func startPayload(text string) (payload string, isStart bool) {
+	if text == "/start" {
+		return "", true
+	}
+	if rest, ok := strings.CutPrefix(text, "/start "); ok {
+		return strings.TrimSpace(rest), true
+	}
+	return "", false
+}
+
+func (uc *ProcessUpdate) begin(ctx context.Context, in IncomingMessage, referrer string) {
 	if uc.orgID == "" {
 		uc.log.Error("telegram bot has no organization configured")
 		uc.send(ctx, in.ChatID, msgNotReady)
@@ -102,10 +115,16 @@ func (uc *ProcessUpdate) begin(ctx context.Context, in IncomingMessage) {
 		uc.send(ctx, in.ChatID, msgInternal)
 		return
 	}
+	if referrer != "" {
+		uc.log.Info("telegram user arrived via deep link", "chat_id", in.ChatID, "referrer", referrer)
+	}
 	uc.send(ctx, in.ChatID, msgAskName)
 }
 
-func (uc *ProcessUpdate) handleStart(ctx context.Context, user *domain.TelegramUser, in IncomingMessage) {
+func (uc *ProcessUpdate) handleStart(ctx context.Context, user *domain.TelegramUser, in IncomingMessage, referrer string) {
+	if referrer != "" {
+		uc.log.Info("telegram /start via deep link", "chat_id", in.ChatID, "referrer", referrer)
+	}
 	user.SetUsername(in.Username)
 	if user.Registered() {
 		_ = uc.repo.Save(ctx, *user)

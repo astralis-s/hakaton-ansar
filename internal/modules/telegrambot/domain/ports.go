@@ -42,6 +42,12 @@ type Messenger interface {
 	AskForContact(ctx context.Context, chatID int64, text string) error
 }
 
+// BotIdentity returns the bot's @username (used to build t.me deep links).
+// Implemented in infra over getMe, with caching.
+type BotIdentity interface {
+	Username(ctx context.Context) (string, error)
+}
+
 // TxManager runs a function inside a single database transaction.
 type TxManager interface {
 	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error

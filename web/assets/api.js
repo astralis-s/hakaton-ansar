@@ -74,6 +74,7 @@
     listChats: function () { return request('GET', '/chats'); },
     chatThread: function (clientId) { return request('GET', '/chats/' + clientId + '/messages'); },
     sendChatMessage: function (clientId, body) { return request('POST', '/chats/' + clientId + '/messages', { body: body }); },
+    telegramLink: function () { return request('GET', '/chats/telegram-link'); },
 
     financeReport: function () { return request('GET', '/finance/report'); },
     listExpenses: function () { return request('GET', '/finance/expenses'); },

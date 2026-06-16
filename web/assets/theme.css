@@ -1272,3 +1272,15 @@ textarea.input { height:auto; padding:11px 13px; min-height:80px; resize:vertica
   .entity-contract-side { min-width:0; width:100%; }
   .entity-progress-row { flex-direction:column; align-items:flex-start; }
 }
+
+/* Telegram-бот: персональная ссылка менеджера на странице чата */
+.tg-link {
+  display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  margin-bottom:14px; padding:14px 16px; border-radius:var(--radius);
+  background:var(--accent-soft); border:1px solid var(--accent-bd); box-shadow:var(--shadow);
+}
+.tg-link-info { flex:1; min-width:240px; }
+.tg-link-title { display:flex; align-items:center; gap:8px; font-weight:700; color:var(--accent); }
+.tg-link-sub { margin-top:3px; font-size:13px; color:var(--fg-muted); line-height:1.5; }
+.tg-link-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.tg-link-input { min-width:220px; max-width:380px; background:var(--surface); font-size:13px; }

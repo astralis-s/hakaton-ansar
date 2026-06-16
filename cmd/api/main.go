@@ -162,6 +162,7 @@ func run() error {
 			Inbox:           telegraminfra.NewChatInbox(portalModule.SendMessageUseCase()),
 		})
 		portalModule.SetStaffReplyNotifier(tgModule.Notifier())
+		portalModule.SetTelegramLinkProvider(tgModule.LinkProvider())
 		go tgModule.Run(ctx)
 		log.Info("telegram support bot enabled")
 	} else {

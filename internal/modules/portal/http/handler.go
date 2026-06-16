@@ -31,8 +31,13 @@ type Handler struct {
 	browse    *app.BrowseProducts
 	submitReq *app.SubmitRequest
 	myReqs    *app.ListMyRequests
+	tgLink    domain.TelegramLinkProvider // optional; set after construction
 	log       *slog.Logger
 }
+
+// SetTelegramLink wires the manager-deep-link provider (set late, only when the
+// Telegram bot module is enabled).
+func (h *Handler) SetTelegramLink(p domain.TelegramLinkProvider) { h.tgLink = p }
 
 type HandlerDeps struct {
 	Provision *app.ProvisionAccess
@@ -63,9 +68,26 @@ func NewHandler(d HandlerDeps) *Handler {
 func (h *Handler) RegisterStaffRoutes(r chi.Router) {
 	r.Route("/chats", func(cr chi.Router) {
 		cr.Get("/", h.ListChats)
+		cr.Get("/telegram-link", h.TelegramLink) // manager's personal bot deep link
 		cr.Get("/{clientID}/messages", h.StaffThread)
 		cr.Post("/{clientID}/messages", h.StaffSend)
 	})
+}
+
+// TelegramLink returns the logged-in manager's personal Telegram bot deep link
+// for the staff chat page. Available=false when the bot is not configured.
+func (h *Handler) TelegramLink(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	if h.tgLink == nil {
+		web.JSON(w, http.StatusOK, telegramLinkResponse{Available: false})
+		return
+	}
+	url, available, err := h.tgLink.ManagerLink(r.Context(), p.OrgID, p.UserID)
+	if err != nil {
+		apperror.Write(w, r, h.log, apperror.Internal("telegram link failed", err))
+		return
+	}
+	web.JSON(w, http.StatusOK, telegramLinkResponse{Available: available, URL: url})
 }
 
 // RegisterPublicPortalRoutes mounts the unauthenticated client login route.
