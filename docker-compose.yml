@@ -18,19 +18,24 @@ services:
   app:
     build: .
     environment:
-      APP_ENV: development
+      APP_ENV: ${APP_ENV:-production}
       HTTP_PORT: "8080"
       DATABASE_URL: postgres://amana:amana@postgres:5432/amana?sslmode=disable
       MIGRATE_ON_BOOT: "true"
-      SEED_ON_BOOT: "true"
-      JWT_SECRET: dev-secret-change-me
-      LOG_LEVEL: info
+      SEED_ON_BOOT: ${SEED_ON_BOOT:-true}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: json
+      # Telegram support bot (optional). Set TELEGRAM_BOT_TOKEN in a local .env
+      # next to this file — Compose injects it here. Empty → bot stays disabled.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ORG_ID: ${TELEGRAM_ORG_ID:-}
     ports:
-      - "8080:8080"
+      - "${HTTP_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:
