@@ -26,6 +26,9 @@ import (
 	iaminfra "github.com/astralis-s/hakaton-ansar/internal/modules/iam/infra"
 	ledgerapp "github.com/astralis-s/hakaton-ansar/internal/modules/ledger/app"
 	ledgerinfra "github.com/astralis-s/hakaton-ansar/internal/modules/ledger/infra"
+	portalapp "github.com/astralis-s/hakaton-ansar/internal/modules/portal/app"
+	portaldomain "github.com/astralis-s/hakaton-ansar/internal/modules/portal/domain"
+	portalinfra "github.com/astralis-s/hakaton-ansar/internal/modules/portal/infra"
 	schedulingapp "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/app"
 	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
 	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
@@ -40,6 +43,9 @@ const (
 	ManagerEmail  = "manager@amana.ru"
 	ManagerPass   = "manager12345"
 	DemoAPIKey    = "amana_demo_marketplace_key_2026"
+	// Demo client portal login (first client).
+	PortalClientEmail = "client@amana.ru"
+	PortalClientPass  = "client12345"
 )
 
 // Config carries the prayer settings the seeder needs for the reminder slots.
@@ -296,6 +302,42 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		}
 	}
 
+	// --- Client portal access + demo chat ------------------------------------
+	portalAccounts := portalinfra.NewAccountRepository(pool)
+	portalClients := portalinfra.NewClientReader(clientRepo)
+	chatRepo := portalinfra.NewChatRepository(pool)
+	provisionUC := portalapp.NewProvisionAccess(portalAccounts, portalClients, portalinfra.NewBcryptHasher())
+	sendMsgUC := portalapp.NewSendMessage(chatRepo, tx)
+
+	if _, err := provisionUC.Execute(ctx, portalapp.ProvisionAccessInput{
+		OrgID:    org.ID(),
+		ClientID: clientIDs[0],
+		Email:    PortalClientEmail,
+		Password: PortalClientPass,
+	}); err != nil {
+		return seedErr("portal access", err)
+	}
+	demoChat := []struct {
+		kind   portaldomain.SenderKind
+		sender string
+		body   string
+	}{
+		{portaldomain.SenderClient, clientIDs[0], "Ассаламу алейкум! Подскажите, когда удобно забрать диван?"},
+		{portaldomain.SenderStaff, owner.ID(), "Ва алейкум ассалам! Диван готов — можем доставить завтра после Зухр-намаза, иншаАллах."},
+		{portaldomain.SenderClient, clientIDs[0], "Отлично, спасибо! Буду ждать."},
+	}
+	for _, msg := range demoChat {
+		if _, err := sendMsgUC.Execute(ctx, portalapp.SendMessageInput{
+			OrgID:      org.ID(),
+			ClientID:   clientIDs[0],
+			SenderKind: msg.kind,
+			SenderID:   msg.sender,
+			Body:       msg.body,
+		}); err != nil {
+			return seedErr("portal message", err)
+		}
+	}
+
 	// --- Reminders (namaz-aware) ---------------------------------------------
 	loc := schedulingdomain.Location{Lat: cfg.Lat, Lon: cfg.Lon, TZ: cfg.Timezone}
 	provider := schedulinginfra.NewPrayerProvider(loc, cfg.Madhab, cfg.Method)
@@ -318,6 +360,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		"organization", org.Name(),
 		"owner", OwnerEmail, "owner_password", OwnerPassword,
 		"manager", ManagerEmail, "manager_password", ManagerPass,
+		"portal_client", PortalClientEmail, "portal_client_password", PortalClientPass,
 		"demo_api_key", DemoAPIKey,
 		"clients", len(clientIDs), "products", len(productIDs), "contracts", len(seededContracts), "reminders", len(reminders), "expenses", len(expenses),
 	)

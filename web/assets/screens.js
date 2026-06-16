@@ -567,10 +567,51 @@
                       </tr>`;
                     })}</tbody></table>`}
             </div>
+            <${PortalAccessCard} client=${c} ctx=${ctx}/>
           </div>`;
         })()}
       <//>
     </div>`;
+  }
+
+  /* Portal access: staff provisions a client login so they can use the portal/chat. */
+  function PortalAccessCard(p) {
+    var acc = useAsync(function () { return api.getPortalAccess(p.client.id); }, [p.client.id]);
+    var m = useState(false), open = m[0], setOpen = m[1];
+    var a = acc.data || {};
+    return html`<div class="card card-pad">
+      <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div>
+          <div style=${{ fontWeight: 700, marginBottom: 2 }}>Доступ в клиентский портал</div>
+          <div class="page-sub">${acc.loading ? 'Проверяем…' : (a.has_access ? ('Вход: ' + a.email) : 'Доступ не выдан')}</div>
+        </div>
+        <button class="btn btn-soft" onClick=${function () { setOpen(true); }}>
+          <${Icon} name="user" size=${16}/> ${a.has_access ? 'Изменить' : 'Выдать доступ'}</button>
+      </div>
+      ${a.has_access ? html`<div class="banner banner-info" style=${{ marginTop: 12 }}>
+        <${Icon} name="info" size=${16}/> Клиент входит на странице <b>/#/portal</b> по email и паролю и пишет вам в чат.</div>` : null}
+      ${open ? html`<${PortalAccessModal} client=${p.client} ctx=${p.ctx} current=${a}
+        onClose=${function () { setOpen(false); }}
+        onSaved=${function () { setOpen(false); acc.reload(); p.ctx.toast('Доступ обновлён'); }}/>` : null}
+    </div>`;
+  }
+  function PortalAccessModal(p) {
+    var f = useState({ email: (p.current && p.current.email) || '', password: '' }), v = f[0], set = f[1];
+    var b = useState(false), busy = b[0], setBusy = b[1];
+    function save() {
+      if (!v.email.trim() || v.password.length < 8) { p.ctx.toast('Укажите email и пароль (мин. 8 символов)', true); return; }
+      setBusy(true);
+      api.setPortalAccess(p.client.id, { email: v.email.trim(), password: v.password })
+        .then(p.onSaved).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
+    }
+    var inp = function (k, ph, type) { return html`<input class="input" type=${type || 'text'} value=${v[k]} placeholder=${ph}
+      onInput=${function (e) { var o = {}; o[k] = e.target.value; set(Object.assign({}, v, o)); }}/>`; };
+    return html`<${ui.Modal} title="Доступ в портал" onClose=${p.onClose}>
+      <div style=${{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 12 }}>${p.client.full_name} сможет войти в клиентский портал и переписываться с вами.</div>
+      <${ui.Field} label="Email для входа">${inp('email', 'client@mail.ru')}<//>
+      <${ui.Field} label="Пароль (мин. 8 символов)">${inp('password', '••••••••', 'password')}<//>
+      <button class="btn btn-primary btn-block" disabled=${busy} onClick=${save}>${busy ? html`<${ui.Spinner}/>` : 'Сохранить доступ'}</button>
+    <//>`;
   }
 
   function ProductCard(ctx) {
@@ -1449,6 +1490,57 @@
     return d.toISOString().slice(0, 10);
   }
 
+  /* ================= CHAT (staff ↔ clients) =================
+     Two-pane inbox: conversation list + the shared ChatThread (which polls). A
+     client must be given portal access (in their card) before they can write. */
+  function Chat(ctx) {
+    var chats = useAsync(api.listChats);
+    var list = chats.data || [];
+    var sel = useState(null), selId = sel[0], setSelId = sel[1];
+    useEffect(function () {
+      if (selId == null && list.length > 0) setSelId(list[0].client_id);
+    }, [list.length]);
+    var current = list.filter(function (c) { return c.client_id === selId; })[0];
+    return html`<div>
+      <${PageHead} title="Чат" sub="Сообщения с клиентами"/>
+      <${Guard} loading=${chats.loading} err=${chats.err}>
+        ${list.length === 0
+          ? html`<div class="card"><${ui.Empty} icon="chat" title="Пока нет диалогов"
+              text="Клиенты пишут из своего портала. Выдайте клиенту доступ в его карточке (раздел «Клиенты»)."/></div>`
+          : html`<div class="chat-layout">
+              <div class="chat-list">
+                ${list.map(function (c) {
+                  return html`<button key=${c.client_id} class=${'chat-list-item ' + (selId === c.client_id ? 'active' : '')}
+                    onClick=${function () { setSelId(c.client_id); }}>
+                    <span class="chat-avatar">${initials(c.client_name)}</span>
+                    <div class="chat-list-copy">
+                      <div class="chat-list-top">
+                        <span class="chat-list-name">${c.client_name || 'Клиент'}</span>
+                        <span class="chat-list-time">${fmt.time(c.last_message_at)}</span>
+                      </div>
+                      <div class="chat-list-preview">${c.last_sender === 'staff' ? 'Вы: ' : ''}${c.last_message || '—'}</div>
+                    </div>
+                  </button>`;
+                })}
+              </div>
+              <div class="chat-pane">
+                ${current ? html`<div class="chat-pane-head">
+                    <span class="chat-avatar">${initials(current.client_name)}</span>
+                    <div><div class="chat-pane-name">${current.client_name || 'Клиент'}</div>
+                      <div class="chat-pane-sub">Клиент</div></div>
+                  </div>` : null}
+                ${selId ? html`<${ui.ChatThread} threadKey=${selId} meKind="staff"
+                    load=${function () { return api.chatThread(selId); }}
+                    onSend=${function (body) { return api.sendChatMessage(selId, body).then(function (r) { chats.reload(); return r; }); }}
+                    onError=${function (e) { ctx.toast(e.message, true); }}
+                    placeholder="Ответить клиенту…"/>`
+                  : html`<div class="chat-empty">Выберите диалог</div>`}
+              </div>
+            </div>`}
+      <//>
+    </div>`;
+  }
+
   /* ================= FINANCE (доходы и расходы) =================
      Income is derived on the backend from contracts (продажа − закупка);
      expenses = cost of goods (auto) + manual entries. The P&L summary and the
@@ -1567,6 +1659,6 @@
   }
 
   AM.screens = { dashboard: Dashboard, clients: Clients, client: ClientCard, catalog: Catalog, product: ProductCard, contracts: Contracts, reminder: ReminderCard,
-    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule, finance: Finance,
+    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule, finance: Finance, chat: Chat,
     developers: Developers, settings: Settings };
 })();

@@ -40,6 +40,9 @@
     star: 'M12 2l3 6.5 7 .9-5 4.8 1.3 7-6.3-3.4L5.7 21 7 14.2 2 9.4l7-.9z',
     package: 'M16.5 9.4 7.5 4.2M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.3 7L12 12l8.7-5M12 22V12',
     truck: 'M1 3h15v13H1zM16 8h4l3 3v5h-7zM5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+    chat: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+    send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
+    user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   };
 
   function Icon(props) {
@@ -119,6 +122,68 @@
     </div>`;
   }
 
+  /* Reusable chat thread: loads messages via props.load(), polls every 4s, aligns
+     bubbles by sender (props.meKind), and sends via props.onSend(body). Reused by
+     the staff chat screen and the client portal. Re-mounts when props.threadKey
+     changes (e.g. a different conversation is selected). */
+  function ChatThread(p) {
+    var st = React.useState({ msgs: [], loading: true, err: '' }), s = st[0], set = st[1];
+    var bd = React.useState(''), body = bd[0], setBody = bd[1];
+    var sg = React.useState(false), sending = sg[0], setSending = sg[1];
+    var endRef = React.useRef(null);
+    var key = p.threadKey || '';
+
+    React.useEffect(function () {
+      var alive = true;
+      function pull(initial) {
+        p.load().then(function (r) { if (alive) set({ msgs: r || [], loading: false, err: '' }); })
+          .catch(function (e) { if (alive && initial) set({ msgs: [], loading: false, err: e.message || 'Ошибка' }); });
+      }
+      set({ msgs: [], loading: true, err: '' });
+      pull(true);
+      var t = setInterval(function () { pull(false); }, 4000);
+      return function () { alive = false; clearInterval(t); };
+    }, [key]);
+
+    React.useEffect(function () { if (endRef.current) endRef.current.scrollIntoView({ block: 'end' }); }, [s.msgs.length]);
+
+    function send() {
+      var text = body.trim();
+      if (!text || sending) return;
+      setSending(true);
+      p.onSend(text).then(function () {
+        setBody(''); setSending(false);
+        p.load().then(function (r) { set({ msgs: r || [], loading: false, err: '' }); }).catch(function () {});
+      }).catch(function (e) { setSending(false); if (p.onError) p.onError(e); });
+    }
+
+    var inner;
+    if (s.loading) inner = html`<${Loading}/>`;
+    else if (s.err) inner = html`<div class="banner banner-warn">${s.err}</div>`;
+    else if (s.msgs.length === 0) inner = html`<div class="chat-empty">${p.emptyText || 'Сообщений пока нет. Напишите первым!'}</div>`;
+    else inner = s.msgs.map(function (m) {
+      var mine = m.sender_kind === p.meKind;
+      return html`<div key=${m.id} class=${'chat-row ' + (mine ? 'mine' : 'theirs')}>
+        <div class="chat-bubble">
+          <div class="chat-bubble-body">${m.body}</div>
+          <div class="chat-bubble-time">${window.AM.fmt.time(m.created_at)}</div>
+        </div>
+      </div>`;
+    });
+
+    return html`<div class="chat-thread">
+      <div class="chat-messages">${inner}<div ref=${endRef}></div></div>
+      <div class="chat-composer">
+        <input class="input" placeholder=${p.placeholder || 'Сообщение…'} value=${body}
+          onInput=${function (e) { setBody(e.target.value); }}
+          onKeyDown=${function (e) { if (e.key === 'Enter') send(); }}/>
+        <button class="btn btn-primary" disabled=${sending || !body.trim()} onClick=${send} aria-label="Отправить">
+          ${sending ? html`<${Spinner}/>` : html`<${Icon} name="send" size=${17}/>`}</button>
+      </div>
+    </div>`;
+  }
+
   AM.ui = { React: React, html: html, Icon: Icon, Spinner: Spinner, Loading: Loading, Skeleton: Skeleton,
-    BlockError: BlockError, Chip: Chip, StatusChip: StatusChip, Field: Field, Modal: Modal, Empty: Empty, labels: labels };
+    BlockError: BlockError, Chip: Chip, StatusChip: StatusChip, Field: Field, Modal: Modal, Empty: Empty,
+    ChatThread: ChatThread, labels: labels };
 })();

@@ -71,6 +71,12 @@
     settleContract: function (id) { return request('POST', '/contracts/' + id + '/settle'); },
     cancelContract: function (id) { return request('POST', '/contracts/' + id + '/cancel'); },
 
+    listChats: function () { return request('GET', '/chats'); },
+    chatThread: function (clientId) { return request('GET', '/chats/' + clientId + '/messages'); },
+    sendChatMessage: function (clientId, body) { return request('POST', '/chats/' + clientId + '/messages', { body: body }); },
+    getPortalAccess: function (clientId) { return request('GET', '/portal-access/' + clientId); },
+    setPortalAccess: function (clientId, p) { return request('PUT', '/portal-access/' + clientId, p); },
+
     financeReport: function () { return request('GET', '/finance/report'); },
     listExpenses: function () { return request('GET', '/finance/expenses'); },
     createExpense: function (p) { return request('POST', '/finance/expenses', p); },
@@ -90,6 +96,52 @@
 
     listUsers: function () { return request('GET', '/users'); },
     createUser: function (p) { return request('POST', '/users', p); },
+  };
+
+  /* ---------- client portal (separate token + /api/portal surface) ---------- */
+  var CTOKEN_KEY = 'amana.ctoken';
+  function getCToken() { try { return localStorage.getItem(CTOKEN_KEY) || ''; } catch (e) { return ''; } }
+  function setCToken(t) { try { t ? localStorage.setItem(CTOKEN_KEY, t) : localStorage.removeItem(CTOKEN_KEY); } catch (e) {} }
+
+  async function portalRequest(method, path, body) {
+    var headers = { 'Content-Type': 'application/json' };
+    var tok = getCToken();
+    if (tok) headers['Authorization'] = 'Bearer ' + tok;
+    var res;
+    try {
+      res = await fetch('/api/portal' + path, {
+        method: method, headers: headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    } catch (e) {
+      var net = new Error('Сеть недоступна. Проверьте подключение.');
+      net.code = 'network'; net.status = 0; throw net;
+    }
+    if (res.status === 204) return null;
+    var data = null;
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok) {
+      var msg = (data && data.error && data.error.message) || ('Ошибка ' + res.status);
+      var err = new Error(msg);
+      err.code = (data && data.error && data.error.code) || 'error';
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  api.portal = {
+    isAuthed: function () { return !!getCToken(); },
+    logout: function () { setCToken(''); },
+    login: async function (email, password) {
+      var r = await portalRequest('POST', '/auth/login', { email: email, password: password });
+      if (r && r.token) setCToken(r.token);
+      return r;
+    },
+    me: function () { return portalRequest('GET', '/me'); },
+    contracts: function () { return portalRequest('GET', '/contracts'); },
+    messages: function () { return portalRequest('GET', '/messages'); },
+    send: function (body) { return portalRequest('POST', '/messages', { body: body }); },
   };
 
   /* ---------- formatting ---------- */

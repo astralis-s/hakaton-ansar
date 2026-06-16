@@ -27,6 +27,14 @@ type Client struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type ClientPortalAccount struct {
+	ClientID     pgtype.UUID        `json:"client_id"`
+	OrgID        pgtype.UUID        `json:"org_id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type Contract struct {
 	ID                pgtype.UUID        `json:"id"`
 	OrgID             pgtype.UUID        `json:"org_id"`
@@ -46,6 +54,14 @@ type Contract struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type Conversation struct {
+	ID            pgtype.UUID        `json:"id"`
+	OrgID         pgtype.UUID        `json:"org_id"`
+	ClientID      pgtype.UUID        `json:"client_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	LastMessageAt pgtype.Timestamptz `json:"last_message_at"`
+}
+
 type Expense struct {
 	ID        pgtype.UUID        `json:"id"`
 	OrgID     pgtype.UUID        `json:"org_id"`
@@ -62,6 +78,16 @@ type Installment struct {
 	Number     int32          `json:"number"`
 	DueDate    pgtype.Date    `json:"due_date"`
 	Amount     pgtype.Numeric `json:"amount"`
+}
+
+type Message struct {
+	ID             pgtype.UUID        `json:"id"`
+	ConversationID pgtype.UUID        `json:"conversation_id"`
+	OrgID          pgtype.UUID        `json:"org_id"`
+	SenderKind     string             `json:"sender_kind"`
+	SenderID       pgtype.UUID        `json:"sender_id"`
+	Body           string             `json:"body"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type Organization struct {

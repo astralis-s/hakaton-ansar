@@ -27,6 +27,8 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/ledger"
 	ledgerinfra "github.com/astralis-s/hakaton-ansar/internal/modules/ledger/infra"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/portal"
+	portalinfra "github.com/astralis-s/hakaton-ansar/internal/modules/portal/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/scheduling"
 	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
 	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
@@ -129,6 +131,15 @@ func run() error {
 		Log:   log,
 		Sales: ledgerinfra.NewSalesReader(financingModule.Contracts()),
 	})
+	portalModule := portal.New(portal.Deps{
+		Pool:      pool,
+		Tx:        txManager,
+		Log:       log,
+		JWTSecret: cfg.Auth.JWTSecret,
+		JWTTTL:    cfg.Auth.JWTTTL,
+		Clients:   portalinfra.NewClientReader(crmModule.Clients()),
+		Contracts: portalinfra.NewContractReader(financingModule.Contracts()),
+	})
 
 	prayerLoc := schedulingdomain.Location{Lat: cfg.Prayer.Lat, Lon: cfg.Prayer.Lon, TZ: loadTimezone(cfg.Prayer.Timezone, log)}
 	schedulingModule := scheduling.New(scheduling.Deps{
@@ -154,7 +165,7 @@ func run() error {
 		CORSAllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 	}, log)
 
-	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule, financingModule, ledgerModule, schedulingModule, publicAPI)
+	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule, financingModule, ledgerModule, portalModule, schedulingModule, publicAPI)
 
 	return srv.Run(ctx)
 }
@@ -188,7 +199,7 @@ func prayerPolicy(p config.Prayer) schedulingdomain.Policy {
 }
 
 // mountRoutes registers the health check, Swagger UI and the two API surfaces.
-func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module, financingModule *financing.Module, ledgerModule *ledger.Module, schedulingModule *scheduling.Module, publicAPI *publicapiv1.Module) {
+func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module, financingModule *financing.Module, ledgerModule *ledger.Module, portalModule *portal.Module, schedulingModule *scheduling.Module, publicAPI *publicapiv1.Module) {
 	// Liveness probe — always 200 once the server is up.
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		web.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -224,7 +235,17 @@ func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Mod
 			crmModule.RegisterRoutes(pr)
 			financingModule.RegisterRoutes(pr)
 			ledgerModule.RegisterRoutes(pr)
+			portalModule.RegisterStaffRoutes(pr) // staff chat + portal-access
 			schedulingModule.RegisterRoutes(pr)
+		})
+	})
+
+	// Client portal API — separate client JWT (kind=client), not staff JWT.
+	r.Route("/api/portal", func(cr chi.Router) {
+		portalModule.RegisterPublicPortalRoutes(cr) // client login
+		cr.Group(func(pr chi.Router) {
+			pr.Use(portalModule.ClientMiddleware())
+			portalModule.RegisterProtectedPortalRoutes(pr)
 		})
 	})
 

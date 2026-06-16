@@ -175,6 +175,7 @@
         <div style=${{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button class="icon-btn" onClick=${p.toggleTheme} title="Тема" style=${{ border: '1px solid var(--glass-bd)', background: 'var(--glass-2)' }}>
             <${Icon} name=${p.theme === 'dark' ? 'sun' : 'moon'} size=${18}/></button>
+          <a class="btn btn-soft" href="#/portal">Кабинет клиента</a>
           <button class="btn btn-primary" onClick=${open}>Войти</button>
         </div>
       </header>

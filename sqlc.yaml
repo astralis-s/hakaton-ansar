@@ -58,3 +58,11 @@ sql:
       go:
         <<: *gen
         out: internal/modules/ledger/infra/sqlcgen
+  - name: portal
+    engine: postgresql
+    schema: migrations
+    queries: internal/modules/portal/infra/queries
+    gen:
+      go:
+        <<: *gen
+        out: internal/modules/portal/infra/sqlcgen

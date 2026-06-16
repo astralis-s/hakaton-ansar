@@ -18,6 +18,8 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/ledger"
 	ledgerinfra "github.com/astralis-s/hakaton-ansar/internal/modules/ledger/infra"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/portal"
+	portalinfra "github.com/astralis-s/hakaton-ansar/internal/modules/portal/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/scheduling"
 	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
 	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
@@ -51,6 +53,15 @@ func newTestRouter() chi.Router {
 		Log:   nil,
 		Sales: ledgerinfra.NewSalesReader(financingModule.Contracts()),
 	})
+	portalModule := portal.New(portal.Deps{
+		Pool:      nil,
+		Tx:        nil,
+		Log:       nil,
+		JWTSecret: "test-secret",
+		JWTTTL:    0,
+		Clients:   portalinfra.NewClientReader(crmModule.Clients()),
+		Contracts: portalinfra.NewContractReader(financingModule.Contracts()),
+	})
 	prayerLoc := schedulingdomain.Location{Lat: 43.3178, Lon: 45.6949, TZ: time.UTC}
 	schedulingModule := scheduling.New(scheduling.Deps{
 		Pool:     nil,
@@ -65,7 +76,7 @@ func newTestRouter() chi.Router {
 		Log:            nil,
 	})
 	r := chi.NewRouter()
-	mountRoutes(r, iamModule, catalogModule, crmModule, financingModule, ledgerModule, schedulingModule, publicAPI)
+	mountRoutes(r, iamModule, catalogModule, crmModule, financingModule, ledgerModule, portalModule, schedulingModule, publicAPI)
 	return r
 }
 
@@ -82,6 +93,7 @@ func TestPublicRoutes(t *testing.T) {
 		{"swagger doc", http.MethodGet, "/swagger/doc.json", http.StatusOK},
 		{"protected app route without token → 401", http.MethodGet, "/api/app/auth/me", http.StatusUnauthorized},
 		{"public api route without key → 401", http.MethodGet, "/api/v1/contracts/00000000-0000-0000-0000-000000000000/payments", http.StatusUnauthorized},
+		{"client portal route without token → 401", http.MethodGet, "/api/portal/me", http.StatusUnauthorized},
 		{"unknown api route → 404", http.MethodGet, "/api/app/nope", http.StatusNotFound},
 		{"unknown non-api route → SPA shell", http.MethodGet, "/some/spa/route", http.StatusOK},
 	}
