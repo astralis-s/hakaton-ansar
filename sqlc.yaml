@@ -50,3 +50,11 @@ sql:
       go:
         <<: *gen
         out: internal/modules/scheduling/infra/sqlcgen
+  - name: ledger
+    engine: postgresql
+    schema: migrations
+    queries: internal/modules/ledger/infra/queries
+    gen:
+      go:
+        <<: *gen
+        out: internal/modules/ledger/infra/sqlcgen

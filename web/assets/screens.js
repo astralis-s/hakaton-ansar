@@ -1449,7 +1449,124 @@
     return d.toISOString().slice(0, 10);
   }
 
+  /* ================= FINANCE (доходы и расходы) =================
+     Income is derived on the backend from contracts (продажа − закупка);
+     expenses = cost of goods (auto) + manual entries. The P&L summary and the
+     per-sale breakdown come from GET /finance/report; the manual expense list
+     from GET /finance/expenses. */
+  function Finance(ctx) {
+    var rep = useAsync(api.financeReport);
+    var exp = useAsync(api.listExpenses);
+    var products = useAsync(api.listProducts);
+    var m = useState(false), open = m[0], setOpen = m[1];
+    var r = rep.data;
+    var productName = function (id) { var p = findByID(products.data, id); return p ? p.name : '—'; };
+
+    function removeExpense(e) {
+      ctx.confirm({
+        title: 'Удалить расход?', text: e.category + ' — ' + fmt.money(e.amount), okLabel: 'Удалить', danger: true,
+        onOk: function () {
+          api.deleteExpense(e.id).then(function () { exp.reload(); rep.reload(); ctx.toast('Расход удалён'); })
+            .catch(function (ex) { ctx.toast(ex.message, true); });
+        },
+      });
+    }
+
+    return html`<div>
+      <${PageHead} title="Финансы" sub="Доходы и расходы — доход = продажа − закупка"
+        actions=${html`<button class="btn btn-primary" onClick=${function () { setOpen(true); }}><${Icon} name="plus" size=${17}/> Добавить расход</button>`}/>
+      <${Guard} loading=${rep.loading} err=${rep.err}>
+        ${r ? html`<div>
+          <div class="grid" style=${{ gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 12, marginBottom: 16 }}>
+            ${(function () {
+              var netNeg = parseFloat(r.net_profit) < 0;
+              var cards = [
+                ['Выручка', r.revenue, 'Сумма продаж', '', false],
+                ['Себестоимость', r.cost_of_goods, 'Закупка проданного', 'delta-neg', false],
+                ['Валовая прибыль', r.gross_profit, 'Продажа − закупка', 'delta-pos', false],
+                ['Прочие расходы', r.other_expenses, 'Аренда, ремонт…', 'delta-neg', false],
+                ['Чистая прибыль', r.net_profit, 'Итог после расходов', netNeg ? 'delta-neg' : 'delta-pos', true],
+              ];
+              return cards.map(function (k, i) {
+                return html`<div key=${i} class="card card-pad" style=${k[4] ? { borderColor: 'var(--accent-bd)', background: 'var(--accent-soft)' } : null}>
+                  <div class="kpi">
+                    <div class=${'v amana-num ' + k[3]} style=${{ fontSize: 20 }}>${fmt.money(k[1])}</div>
+                    <div class="l">${k[0]}</div>
+                    <div style=${{ fontSize: 11.5, color: 'var(--fg-subtle)', marginTop: 3 }}>${k[2]}</div>
+                  </div>
+                </div>`;
+              });
+            })()}
+          </div>
+          <div class="grid" style=${{ gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+            <div class="table-card">
+              <div class="table-card-head">Прочие расходы (вручную)</div>
+              <${Guard} loading=${exp.loading} err=${exp.err}>
+                ${(exp.data || []).length === 0 ? html`<div class="card"><${ui.Empty} icon="coins" title="Расходов нет" text="Добавьте аренду, ремонт, логистику и т.д."/></div>`
+                  : html`<table class="data-table"><thead><tr><th>Категория</th><th>Дата</th><th>Сумма</th><th></th></tr></thead>
+                      <tbody>${(exp.data || []).map(function (e) {
+                        return html`<tr key=${e.id} class="data-row">
+                          <td><div class="table-title">${e.category}</div>${e.note ? html`<div class="table-subline">${e.note}</div>` : null}</td>
+                          <td>${fmt.date(e.spent_at)}</td>
+                          <td><strong class="table-money amana-num delta-neg">−${fmt.money(e.amount)}</strong></td>
+                          <td class="table-arrow"><button class="icon-btn" title="Удалить" onClick=${function () { removeExpense(e); }}><${Icon} name="trash" size=${15}/></button></td>
+                        </tr>`;
+                      })}</tbody></table>`}
+              <//>
+            </div>
+            <div class="table-card">
+              <div class="table-card-head">Доходы от продаж</div>
+              ${(function () {
+                var sales = (r.sales || []).filter(function (s) { return s.status !== 'cancelled'; });
+                return sales.length === 0 ? html`<div class="card"><${ui.Empty} icon="contracts" title="Продаж пока нет"/></div>`
+                  : html`<table class="data-table"><thead><tr><th>Товар</th><th>Продажа</th><th>Закупка</th><th>Прибыль</th></tr></thead>
+                      <tbody>${sales.map(function (s) {
+                        return html`<tr key=${s.contract_id} class="data-row row-link" onClick=${function () { ctx.go('contract', s.contract_id); }}>
+                          <td><div class="table-title">${productName(s.product_id)}</div></td>
+                          <td class="table-money amana-num">${fmt.money(s.sale_price)}</td>
+                          <td class="table-money amana-num">${fmt.money(s.cost_price)}</td>
+                          <td><strong class="table-money amana-num delta-pos">+${fmt.money(s.profit)}</strong></td>
+                        </tr>`;
+                      })}</tbody></table>`;
+              })()}
+            </div>
+          </div>
+        </div>` : null}
+      <//>
+      ${open ? html`<${ExpenseModal} ctx=${ctx} onClose=${function () { setOpen(false); }}
+        onSaved=${function () { setOpen(false); exp.reload(); rep.reload(); ctx.toast('Расход добавлен'); }}/>` : null}
+    </div>`;
+  }
+  function ExpenseModal(p) {
+    var f = useState({ category: 'Аренда', amount: '', note: '', spent_at: new Date().toISOString().slice(0, 10) }), v = f[0], set = f[1];
+    var b = useState(false), busy = b[0], setBusy = b[1];
+    function upd(o) { set(Object.assign({}, v, o)); }
+    function save() {
+      if (!v.category.trim() || !v.amount.trim()) { p.ctx.toast('Заполните категорию и сумму', true); return; }
+      setBusy(true);
+      api.createExpense({ category: v.category.trim(), amount: v.amount.replace(',', '.').trim(), note: v.note.trim(), spent_at: v.spent_at })
+        .then(p.onSaved).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
+    }
+    var inp = function (k, ph) { return html`<input class="input" value=${v[k]} placeholder=${ph} onInput=${function (e) { var o = {}; o[k] = e.target.value; upd(o); }}/>`; };
+    var cats = ['Аренда', 'Ремонт', 'Логистика', 'Реклама', 'Зарплата', 'Налоги', 'Прочее'];
+    return html`<${ui.Modal} title="Новый расход" onClose=${p.onClose}>
+      <${ui.Field} label="Категория">
+        <input class="input" list="amana-expense-cats" value=${v.category} placeholder="Аренда, Ремонт…"
+          onInput=${function (e) { upd({ category: e.target.value }); }}/>
+        <datalist id="amana-expense-cats">${cats.map(function (c) { return html`<option key=${c} value=${c}></option>`; })}</datalist>
+      <//>
+      <div class="grid" style=${{ gridTemplateColumns: '1fr 1fr' }}>
+        <${ui.Field} label="Сумма, ₽">${inp('amount', '15000')}<//>
+        <${ui.Field} label="Дата">
+          <input class="input" type="date" value=${v.spent_at} onInput=${function (e) { upd({ spent_at: e.target.value }); }}/>
+        <//>
+      </div>
+      <${ui.Field} label="Комментарий (необязательно)">${inp('note', 'Аренда зала за месяц')}<//>
+      <button class="btn btn-primary btn-block" disabled=${busy} onClick=${save}>${busy ? html`<${ui.Spinner}/>` : 'Сохранить'}</button>
+    <//>`;
+  }
+
   AM.screens = { dashboard: Dashboard, clients: Clients, client: ClientCard, catalog: Catalog, product: ProductCard, contracts: Contracts, reminder: ReminderCard,
-    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule,
+    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule, finance: Finance,
     developers: Developers, settings: Settings };
 })();

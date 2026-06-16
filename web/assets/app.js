@@ -9,6 +9,7 @@
     ['clients', 'Клиенты', 'clients'],
     ['catalog', 'Каталог', 'catalog'],
     ['contracts', 'Договоры', 'contracts'],
+    ['finance', 'Финансы', 'coins'],
     ['schedule', 'Календарь', 'calendar'],
     ['developers', 'Разработчикам', 'code', true],
     ['settings', 'Настройки', 'settings'],

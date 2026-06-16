@@ -16,6 +16,8 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/financing"
 	financinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/financing/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/ledger"
+	ledgerinfra "github.com/astralis-s/hakaton-ansar/internal/modules/ledger/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/scheduling"
 	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
 	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
@@ -44,6 +46,11 @@ func newTestRouter() chi.Router {
 		Clients:               financinginfra.NewClientReader(crmModule.Clients()),
 		OwnerOnly:             iamModule.OwnerMiddleware(),
 	})
+	ledgerModule := ledger.New(ledger.Deps{
+		Pool:  nil,
+		Log:   nil,
+		Sales: ledgerinfra.NewSalesReader(financingModule.Contracts()),
+	})
 	prayerLoc := schedulingdomain.Location{Lat: 43.3178, Lon: 45.6949, TZ: time.UTC}
 	schedulingModule := scheduling.New(scheduling.Deps{
 		Pool:     nil,
@@ -58,7 +65,7 @@ func newTestRouter() chi.Router {
 		Log:            nil,
 	})
 	r := chi.NewRouter()
-	mountRoutes(r, iamModule, catalogModule, crmModule, financingModule, schedulingModule, publicAPI)
+	mountRoutes(r, iamModule, catalogModule, crmModule, financingModule, ledgerModule, schedulingModule, publicAPI)
 	return r
 }
 

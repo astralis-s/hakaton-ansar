@@ -25,6 +25,8 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/financing"
 	financinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/financing/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/ledger"
+	ledgerinfra "github.com/astralis-s/hakaton-ansar/internal/modules/ledger/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/scheduling"
 	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
 	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
@@ -122,6 +124,11 @@ func run() error {
 		Stock:                 financinginfra.NewStockReserver(catalogModule.Stock()),
 		OwnerOnly:             iamModule.OwnerMiddleware(),
 	})
+	ledgerModule := ledger.New(ledger.Deps{
+		Pool:  pool,
+		Log:   log,
+		Sales: ledgerinfra.NewSalesReader(financingModule.Contracts()),
+	})
 
 	prayerLoc := schedulingdomain.Location{Lat: cfg.Prayer.Lat, Lon: cfg.Prayer.Lon, TZ: loadTimezone(cfg.Prayer.Timezone, log)}
 	schedulingModule := scheduling.New(scheduling.Deps{
@@ -147,7 +154,7 @@ func run() error {
 		CORSAllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 	}, log)
 
-	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule, financingModule, schedulingModule, publicAPI)
+	mountRoutes(srv.Router(), iamModule, catalogModule, crmModule, financingModule, ledgerModule, schedulingModule, publicAPI)
 
 	return srv.Run(ctx)
 }
@@ -181,7 +188,7 @@ func prayerPolicy(p config.Prayer) schedulingdomain.Policy {
 }
 
 // mountRoutes registers the health check, Swagger UI and the two API surfaces.
-func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module, financingModule *financing.Module, schedulingModule *scheduling.Module, publicAPI *publicapiv1.Module) {
+func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Module, crmModule *crm.Module, financingModule *financing.Module, ledgerModule *ledger.Module, schedulingModule *scheduling.Module, publicAPI *publicapiv1.Module) {
 	// Liveness probe — always 200 once the server is up.
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		web.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -216,6 +223,7 @@ func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Mod
 			catalogModule.RegisterRoutes(pr)
 			crmModule.RegisterRoutes(pr)
 			financingModule.RegisterRoutes(pr)
+			ledgerModule.RegisterRoutes(pr)
 			schedulingModule.RegisterRoutes(pr)
 		})
 	})

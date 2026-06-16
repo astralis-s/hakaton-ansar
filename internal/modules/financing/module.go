@@ -35,6 +35,7 @@ type Module struct {
 	handler        *financinghttp.Handler
 	createContract *app.CreateContract
 	getContract    *app.GetContract
+	contracts      domain.ContractRepository
 }
 
 // New wires the financing module.
@@ -56,8 +57,12 @@ func New(d Deps) *Module {
 		Log:       d.Log,
 		OwnerOnly: d.OwnerOnly,
 	})
-	return &Module{handler: handler, createContract: createContract, getContract: getContract}
+	return &Module{handler: handler, createContract: createContract, getContract: getContract, contracts: contracts}
 }
+
+// Contracts exposes the contract repository for cross-context reads (the ledger
+// derives income from sales).
+func (m *Module) Contracts() domain.ContractRepository { return m.contracts }
 
 // RegisterRoutes mounts the financing routes onto a JWT-protected router.
 func (m *Module) RegisterRoutes(r chi.Router) {

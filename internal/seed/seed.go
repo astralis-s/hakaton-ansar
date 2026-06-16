@@ -24,6 +24,8 @@ import (
 	financinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/financing/infra"
 	iamdomain "github.com/astralis-s/hakaton-ansar/internal/modules/iam/domain"
 	iaminfra "github.com/astralis-s/hakaton-ansar/internal/modules/iam/infra"
+	ledgerapp "github.com/astralis-s/hakaton-ansar/internal/modules/ledger/app"
+	ledgerinfra "github.com/astralis-s/hakaton-ansar/internal/modules/ledger/infra"
 	schedulingapp "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/app"
 	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
 	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
@@ -268,6 +270,32 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		seededContracts = append(seededContracts, contract)
 	}
 
+	// --- Manual expenses (расходы) -------------------------------------------
+	// Income (продажа − покупка) is derived from the contracts above; these are
+	// the other business costs that the owner records by hand.
+	expenseRepo := ledgerinfra.NewExpenseRepository(pool)
+	createExpenseUC := ledgerapp.NewCreateExpense(expenseRepo)
+	expenses := []struct {
+		category, amount, note string
+		daysAgo                int
+	}{
+		{"Аренда", "45000.00", "Аренда торгового зала и склада", 20},
+		{"Ремонт", "12000.00", "Ремонт витрины после доставки", 12},
+		{"Логистика", "8000.00", "Доставка мебели клиентам", 6},
+		{"Реклама", "15000.00", "Продвижение в соцсетях", 3},
+	}
+	for _, e := range expenses {
+		if _, err := createExpenseUC.Execute(ctx, ledgerapp.CreateExpenseInput{
+			OrgID:    org.ID(),
+			Category: e.category,
+			Amount:   rub(e.amount),
+			Note:     e.note,
+			SpentAt:  now.AddDate(0, 0, -e.daysAgo),
+		}); err != nil {
+			return seedErr("expense", err)
+		}
+	}
+
 	// --- Reminders (namaz-aware) ---------------------------------------------
 	loc := schedulingdomain.Location{Lat: cfg.Lat, Lon: cfg.Lon, TZ: cfg.Timezone}
 	provider := schedulinginfra.NewPrayerProvider(loc, cfg.Madhab, cfg.Method)
@@ -291,7 +319,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		"owner", OwnerEmail, "owner_password", OwnerPassword,
 		"manager", ManagerEmail, "manager_password", ManagerPass,
 		"demo_api_key", DemoAPIKey,
-		"clients", len(clientIDs), "products", len(productIDs), "contracts", len(seededContracts), "reminders", len(reminders),
+		"clients", len(clientIDs), "products", len(productIDs), "contracts", len(seededContracts), "reminders", len(reminders), "expenses", len(expenses),
 	)
 	return nil
 }

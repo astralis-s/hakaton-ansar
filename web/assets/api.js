@@ -71,6 +71,11 @@
     settleContract: function (id) { return request('POST', '/contracts/' + id + '/settle'); },
     cancelContract: function (id) { return request('POST', '/contracts/' + id + '/cancel'); },
 
+    financeReport: function () { return request('GET', '/finance/report'); },
+    listExpenses: function () { return request('GET', '/finance/expenses'); },
+    createExpense: function (p) { return request('POST', '/finance/expenses', p); },
+    deleteExpense: function (id) { return request('DELETE', '/finance/expenses/' + id); },
+
     listReminders: function () { return request('GET', '/schedule/reminders'); },
     getReminder: function (id) { return request('GET', '/schedule/reminders/' + id); },
     createReminder: function (p) { return request('POST', '/schedule/reminders', p); },

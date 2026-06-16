@@ -46,6 +46,16 @@ type Contract struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type Expense struct {
+	ID        pgtype.UUID        `json:"id"`
+	OrgID     pgtype.UUID        `json:"org_id"`
+	Category  string             `json:"category"`
+	Amount    pgtype.Numeric     `json:"amount"`
+	Note      string             `json:"note"`
+	SpentAt   pgtype.Date        `json:"spent_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Installment struct {
 	ID         pgtype.UUID    `json:"id"`
 	ContractID pgtype.UUID    `json:"contract_id"`
