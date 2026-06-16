@@ -1,0 +1,47 @@
+# Production deployment for a single server: Amana web app on port 80 +
+# PostgreSQL + the integrated Telegram support bot.
+#
+# Secrets (JWT_SECRET, TELEGRAM_BOT_TOKEN, POSTGRES_PASSWORD) are read from a
+# local .env file that deploy/server-setup.sh generates on the server — they are
+# never committed to the repository. Run:
+#
+#   TELEGRAM_BOT_TOKEN=<token> bash deploy/server-setup.sh
+#
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: amana
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-amana}
+      POSTGRES_DB: amana
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amana -d amana"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    environment:
+      APP_ENV: production
+      HTTP_PORT: "8080"
+      DATABASE_URL: postgres://amana:${POSTGRES_PASSWORD:-amana}@postgres:5432/amana?sslmode=disable
+      MIGRATE_ON_BOOT: "true"
+      SEED_ON_BOOT: "true"
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_POLL_TIMEOUT: 30s
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+    ports:
+      - "80:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
