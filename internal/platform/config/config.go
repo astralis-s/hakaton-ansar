@@ -21,6 +21,7 @@ type Config struct {
 	Logger    Logger
 	Prayer    Prayer
 	Financing Financing
+	Telegram  Telegram
 }
 
 // HTTP holds the HTTP server configuration.
@@ -70,6 +71,15 @@ type Prayer struct {
 	BufferAfterMin  int     `env:"PRAYER_BUFFER_AFTER_MIN" envDefault:"20"`
 	JummahStart     string  `env:"PRAYER_JUMMAH_START" envDefault:"12:30"`
 	JummahEnd       string  `env:"PRAYER_JUMMAH_END" envDefault:"14:00"`
+}
+
+// Telegram configures the optional Telegram support bot. When BotToken is empty
+// the bot is disabled and the app runs unchanged.
+type Telegram struct {
+	BotToken    string        `env:"TELEGRAM_BOT_TOKEN" envDefault:""`
+	PollTimeout time.Duration `env:"TELEGRAM_POLL_TIMEOUT" envDefault:"30s"`
+	// OrgID pins the organization the bot serves. Empty → the single org in the DB.
+	OrgID string `env:"TELEGRAM_ORG_ID" envDefault:""`
 }
 
 // Load reads configuration from the process environment. A local .env file is

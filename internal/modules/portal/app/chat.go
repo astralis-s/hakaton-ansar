@@ -10,15 +10,22 @@ import (
 
 // SendMessage appends a message to a client's conversation (creating the
 // conversation on first use), as the client or as staff. The ensure-conversation
-// and append run in one transaction.
+// and append run in one transaction. After a staff reply is committed, an
+// optional notifier is invoked so external channels (e.g. Telegram) can deliver
+// it to the client.
 type SendMessage struct {
-	chat domain.ChatRepository
-	tx   domain.TxManager
+	chat     domain.ChatRepository
+	tx       domain.TxManager
+	notifier domain.StaffReplyNotifier // optional; nil = no external delivery
 }
 
 func NewSendMessage(chat domain.ChatRepository, tx domain.TxManager) *SendMessage {
 	return &SendMessage{chat: chat, tx: tx}
 }
+
+// SetNotifier registers the staff-reply notifier (wired after construction to
+// break the portal↔telegrambot wiring cycle).
+func (uc *SendMessage) SetNotifier(n domain.StaffReplyNotifier) { uc.notifier = n }
 
 type SendMessageInput struct {
 	OrgID      string
@@ -46,7 +53,14 @@ func (uc *SendMessage) Execute(ctx context.Context, in SendMessageInput) (domain
 		msg = stored
 		return nil
 	})
-	return msg, err
+	if err != nil {
+		return domain.Message{}, err
+	}
+	// Forward staff replies to external channels (best-effort, outside the tx).
+	if uc.notifier != nil && in.SenderKind == domain.SenderStaff {
+		uc.notifier.StaffReplied(ctx, in.OrgID, in.ClientID, msg.Body())
+	}
+	return msg, nil
 }
 
 // ListConversations returns the staff inbox (conversations + last-message

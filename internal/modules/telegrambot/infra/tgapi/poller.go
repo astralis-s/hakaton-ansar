@@ -1,4 +1,4 @@
-package telegram
+package tgapi
 
 import (
 	"context"
@@ -6,15 +6,14 @@ import (
 	"time"
 )
 
-// Poller крутит long polling getUpdates и передаёт каждое обновление в handle.
-// Корректно завершается по отмене контекста.
+// Poller long-polls getUpdates and dispatches each update to handle, until ctx
+// is cancelled. Network errors are logged and retried after a short backoff.
 type Poller struct {
 	client     *Client
 	log        *slog.Logger
 	timeoutSec int
 }
 
-// NewPoller создаёт поллер с указанным таймаутом long polling (в секундах).
 func NewPoller(client *Client, log *slog.Logger, timeoutSec int) *Poller {
 	if timeoutSec <= 0 {
 		timeoutSec = 30
@@ -22,8 +21,7 @@ func NewPoller(client *Client, log *slog.Logger, timeoutSec int) *Poller {
 	return &Poller{client: client, log: log, timeoutSec: timeoutSec}
 }
 
-// Run блокирующе обрабатывает обновления до отмены ctx. Ошибки сети логируются,
-// после чего следует короткий бэкофф и повтор.
+// Run blocks, processing updates until ctx is cancelled.
 func (p *Poller) Run(ctx context.Context, handle func(context.Context, Update)) {
 	var offset int64
 	for {
@@ -35,7 +33,7 @@ func (p *Poller) Run(ctx context.Context, handle func(context.Context, Update)) 
 			if ctx.Err() != nil {
 				return
 			}
-			p.log.Error("getUpdates failed", "error", err)
+			p.log.Error("telegram getUpdates failed", "error", err)
 			select {
 			case <-ctx.Done():
 				return

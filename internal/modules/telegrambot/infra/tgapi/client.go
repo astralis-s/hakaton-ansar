@@ -1,4 +1,4 @@
-package telegram
+package tgapi
 
 import (
 	"bytes"
@@ -11,19 +11,16 @@ import (
 
 const apiBase = "https://api.telegram.org"
 
-// Client — тонкий клиент Telegram Bot API поверх net/http.
+// Client is a thin Telegram Bot API client over net/http.
 type Client struct {
 	token string
 	http  *http.Client
 }
 
-// New создаёт клиент. HTTP-таймаут заведомо больше таймаута long polling, чтобы
-// долгий getUpdates не обрывался преждевременно.
+// New creates a client. The HTTP timeout exceeds the long-poll timeout so a long
+// getUpdates is not cut off prematurely.
 func New(token string) *Client {
-	return &Client{
-		token: token,
-		http:  &http.Client{Timeout: 70 * time.Second},
-	}
+	return &Client{token: token, http: &http.Client{Timeout: 70 * time.Second}}
 }
 
 type apiResponse struct {
@@ -33,7 +30,6 @@ type apiResponse struct {
 	ErrorCode   int             `json:"error_code"`
 }
 
-// call выполняет POST-запрос к методу Bot API и при out != nil декодирует result.
 func (c *Client) call(ctx context.Context, method string, payload, out any) error {
 	var body bytes.Buffer
 	if payload != nil {
@@ -56,10 +52,10 @@ func (c *Client) call(ctx context.Context, method string, payload, out any) erro
 
 	var ar apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&ar); err != nil {
-		return fmt.Errorf("декодирование ответа telegram (%s): %w", method, err)
+		return fmt.Errorf("decode telegram response (%s): %w", method, err)
 	}
 	if !ar.OK {
-		return fmt.Errorf("telegram api %s: %s (код %d)", method, ar.Description, ar.ErrorCode)
+		return fmt.Errorf("telegram api %s: %s (code %d)", method, ar.Description, ar.ErrorCode)
 	}
 	if out != nil && len(ar.Result) > 0 {
 		if err := json.Unmarshal(ar.Result, out); err != nil {
@@ -69,7 +65,7 @@ func (c *Client) call(ctx context.Context, method string, payload, out any) erro
 	return nil
 }
 
-// GetMe проверяет токен и возвращает данные бота.
+// GetMe validates the token and returns the bot's identity.
 func (c *Client) GetMe(ctx context.Context) (Me, error) {
 	var me Me
 	err := c.call(ctx, "getMe", nil, &me)
@@ -82,8 +78,7 @@ type getUpdatesRequest struct {
 	AllowedUpdates []string `json:"allowed_updates,omitempty"`
 }
 
-// GetUpdates делает long polling: ждёт до timeoutSec секунд новые обновления,
-// начиная с offset.
+// GetUpdates long-polls for new updates starting at offset.
 func (c *Client) GetUpdates(ctx context.Context, offset int64, timeoutSec int) ([]Update, error) {
 	var updates []Update
 	err := c.call(ctx, "getUpdates", getUpdatesRequest{
@@ -100,13 +95,13 @@ type sendMessageRequest struct {
 	ReplyMarkup any    `json:"reply_markup,omitempty"`
 }
 
-// SendMessage отправляет простое текстовое сообщение.
+// SendMessage sends plain text.
 func (c *Client) SendMessage(ctx context.Context, chatID int64, text string) error {
 	return c.call(ctx, "sendMessage", sendMessageRequest{ChatID: chatID, Text: text}, nil)
 }
 
-// SendMessageWithMarkup отправляет сообщение вместе с reply-разметкой
-// (кастомной клавиатурой или её удалением).
+// SendMessageWithMarkup sends text together with a reply markup (custom keyboard
+// or its removal).
 func (c *Client) SendMessageWithMarkup(ctx context.Context, chatID int64, text string, markup any) error {
 	return c.call(ctx, "sendMessage", sendMessageRequest{ChatID: chatID, Text: text, ReplyMarkup: markup}, nil)
 }

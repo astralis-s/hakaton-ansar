@@ -34,6 +34,7 @@ type Deps struct {
 type Module struct {
 	handler  *portalhttp.Handler
 	clientMW func(http.Handler) http.Handler
+	send     *app.SendMessage
 }
 
 // New wires the portal module.
@@ -43,11 +44,12 @@ func New(d Deps) *Module {
 	hasher := infra.NewBcryptHasher()
 	tokens := infra.NewClientJWTService(d.JWTSecret, d.JWTTTL)
 
+	send := app.NewSendMessage(chat, d.Tx)
 	handler := portalhttp.NewHandler(portalhttp.HandlerDeps{
 		Provision: app.NewProvisionAccess(accounts, d.Clients, hasher),
 		GetAccess: app.NewGetAccess(accounts),
 		Login:     app.NewLoginClient(accounts, hasher, tokens),
-		Send:      app.NewSendMessage(chat, d.Tx),
+		Send:      send,
 		ListConv:  app.NewListConversations(chat, d.Clients),
 		Thread:    app.NewGetThread(chat),
 		Profile:   app.NewGetClientProfile(d.Clients),
@@ -58,11 +60,19 @@ func New(d Deps) *Module {
 		MyReqs:    app.NewListMyRequests(d.Requests),
 		Log:       d.Log,
 	})
-	return &Module{handler: handler, clientMW: portalhttp.ClientAuth(tokens, d.Log)}
+	return &Module{handler: handler, clientMW: portalhttp.ClientAuth(tokens, d.Log), send: send}
 }
 
 // ClientMiddleware validates the client portal JWT for the /api/portal surface.
 func (m *Module) ClientMiddleware() func(http.Handler) http.Handler { return m.clientMW }
+
+// SendMessageUseCase exposes the chat SendMessage use-case so other contexts
+// (e.g. the Telegram bot) can post inbound client messages into the staff chat.
+func (m *Module) SendMessageUseCase() *app.SendMessage { return m.send }
+
+// SetStaffReplyNotifier wires an external delivery channel for staff replies
+// (e.g. the Telegram bot). Called from main after both modules are built.
+func (m *Module) SetStaffReplyNotifier(n domain.StaffReplyNotifier) { m.send.SetNotifier(n) }
 
 // RegisterStaffRoutes mounts staff chat + portal-access routes (JWT /api/app).
 func (m *Module) RegisterStaffRoutes(r chi.Router) { m.handler.RegisterStaffRoutes(r) }

@@ -22,6 +22,7 @@ import (
 	"github.com/astralis-s/hakaton-ansar/api/openapi"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/catalog"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/crm"
+	crmapp "github.com/astralis-s/hakaton-ansar/internal/modules/crm/app"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/financing"
 	financinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/financing/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/modules/iam"
@@ -32,6 +33,8 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/modules/scheduling"
 	schedulingdomain "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/domain"
 	schedulinginfra "github.com/astralis-s/hakaton-ansar/internal/modules/scheduling/infra"
+	"github.com/astralis-s/hakaton-ansar/internal/modules/telegrambot"
+	telegraminfra "github.com/astralis-s/hakaton-ansar/internal/modules/telegrambot/infra"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/config"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/database"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/httpserver"
@@ -142,6 +145,28 @@ func run() error {
 		Catalog:   portalinfra.NewCatalogReader(catalogModule.Products()),
 		Requests:  portalinfra.NewRequestService(financingModule.SubmitRequestUseCase(), financingModule.ListClientRequestsUseCase()),
 	})
+
+	// Telegram support bot (optional): bridges Telegram customers to the staff
+	// chat. Inbound messages land in the portal inbox under the client's full
+	// name; manager replies are delivered back to Telegram. Disabled when no
+	// token is configured, so the app runs unchanged without it.
+	if cfg.Telegram.BotToken != "" {
+		tgModule := telegrambot.New(telegrambot.Deps{
+			Pool:            pool,
+			Tx:              txManager,
+			Log:             log,
+			BotToken:        cfg.Telegram.BotToken,
+			PollTimeout:     cfg.Telegram.PollTimeout,
+			ConfiguredOrgID: cfg.Telegram.OrgID,
+			Clients:         telegraminfra.NewClientDirectory(crmapp.NewCreateClient(crmModule.Clients())),
+			Inbox:           telegraminfra.NewChatInbox(portalModule.SendMessageUseCase()),
+		})
+		portalModule.SetStaffReplyNotifier(tgModule.Notifier())
+		go tgModule.Run(ctx)
+		log.Info("telegram support bot enabled")
+	} else {
+		log.Info("telegram support bot disabled (TELEGRAM_BOT_TOKEN not set)")
+	}
 
 	prayerLoc := schedulingdomain.Location{Lat: cfg.Prayer.Lat, Lon: cfg.Prayer.Lon, TZ: loadTimezone(cfg.Prayer.Timezone, log)}
 	schedulingModule := scheduling.New(scheduling.Deps{
