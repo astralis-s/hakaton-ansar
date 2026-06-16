@@ -59,6 +59,8 @@
     getProduct: function (id) { return request('GET', '/catalog/' + id); },
     createProduct: function (p) { return request('POST', '/catalog', p); },
     updateProduct: function (id, p) { return request('PUT', '/catalog/' + id, p); },
+    adjustStock: function (id, p) { return request('POST', '/catalog/' + id + '/stock', p); },
+    listStockMovements: function () { return request('GET', '/catalog/movements'); },
 
     dashboard: function () { return request('GET', '/dashboard'); },
     listContracts: function () { return request('GET', '/contracts'); },

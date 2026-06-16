@@ -33,6 +33,34 @@ func (r *ProductReader) Get(ctx context.Context, orgID, productID string) (domai
 	return domain.ProductInfo{ID: p.ID(), IsHaram: p.IsHaram()}, nil
 }
 
+// StockReserver adapts the catalog stock repository to financing's StockReserver
+// port: reserving a unit is a sale movement of -1. It translates the catalog's
+// out-of-stock / not-found errors into financing's domain errors so the HTTP
+// layer maps them uniformly. Runs in the caller's transaction.
+type StockReserver struct {
+	stock catalogdomain.StockRepository
+}
+
+func NewStockReserver(stock catalogdomain.StockRepository) *StockReserver {
+	return &StockReserver{stock: stock}
+}
+
+var _ domain.StockReserver = (*StockReserver)(nil)
+
+func (r *StockReserver) Reserve(ctx context.Context, orgID, productID string) error {
+	_, _, err := r.stock.Adjust(ctx, orgID, productID, -1, catalogdomain.StockSale, "продажа по договору")
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, catalogdomain.ErrInsufficientStock):
+		return domain.ErrOutOfStock
+	case errors.Is(err, catalogdomain.ErrProductNotFound):
+		return domain.ErrProductNotFound
+	default:
+		return err
+	}
+}
+
 // ClientReader adapts the crm client repository to financing's ClientReader port.
 type ClientReader struct {
 	clients crmdomain.ClientRepository

@@ -110,7 +110,7 @@ func run() error {
 		JWTSecret: cfg.Auth.JWTSecret,
 		JWTTTL:    cfg.Auth.JWTTTL,
 	})
-	catalogModule := catalog.New(catalog.Deps{Pool: pool, Log: log})
+	catalogModule := catalog.New(catalog.Deps{Pool: pool, Tx: txManager, Log: log})
 	crmModule := crm.New(crm.Deps{Pool: pool, Log: log})
 	financingModule := financing.New(financing.Deps{
 		Pool:                  pool,
@@ -119,6 +119,7 @@ func run() error {
 		ComparisonRatePercent: decimal.NewFromInt(int64(cfg.Financing.ComparisonRatePercent)),
 		Products:              financinginfra.NewProductReader(catalogModule.Products()),
 		Clients:               financinginfra.NewClientReader(crmModule.Clients()),
+		Stock:                 financinginfra.NewStockReserver(catalogModule.Stock()),
 		OwnerOnly:             iamModule.OwnerMiddleware(),
 	})
 

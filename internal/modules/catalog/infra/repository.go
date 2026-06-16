@@ -49,6 +49,7 @@ func (r *ProductRepository) Create(ctx context.Context, p domain.Product) (domai
 		Category:    p.Category(),
 		CostPrice:   cost,
 		HalalStatus: p.HalalStatus().String(),
+		Stock:       int32(p.Stock()),
 	})
 	if err != nil {
 		return domain.Product{}, fmt.Errorf("create product: %w", err)
@@ -137,6 +138,7 @@ func productFromRow(p sqlcgen.Product) (domain.Product, error) {
 		p.Category,
 		money.New(cost, money.DefaultCurrency),
 		domain.HalalStatus(p.HalalStatus),
+		int(p.Stock),
 		pgconv.TimeValue(p.CreatedAt),
 	), nil
 }

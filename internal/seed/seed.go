@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	catalogapp "github.com/astralis-s/hakaton-ansar/internal/modules/catalog/app"
 	catalogdomain "github.com/astralis-s/hakaton-ansar/internal/modules/catalog/domain"
 	cataloginfra "github.com/astralis-s/hakaton-ansar/internal/modules/catalog/infra"
 	crmdomain "github.com/astralis-s/hakaton-ansar/internal/modules/crm/domain"
@@ -64,6 +65,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 	keyRepo := iaminfra.NewApiKeyRepository(pool)
 	hasher := iaminfra.NewBcryptHasher()
 	productRepo := cataloginfra.NewProductRepository(pool)
+	stockRepo := cataloginfra.NewStockRepository(pool)
 	clientRepo := crminfra.NewClientRepository(pool)
 	contractRepo := financinginfra.NewContractRepository(pool)
 	reminderRepo := schedulinginfra.NewReminderRepository(pool)
@@ -124,21 +126,25 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		clientIDs = append(clientIDs, created.ID())
 	}
 
-	// --- Products (mixed halal statuses) -------------------------------------
+	// --- Products (mixed halal statuses) + initial stock receipts ------------
+	// Each product enters the warehouse with zero stock, then a logged receipt
+	// brings it on hand — so every unit is traceable in товарооборот.
+	adjustStockUC := catalogapp.NewAdjustStock(stockRepo, tx)
 	products := []struct {
 		name, category, cost string
 		status               catalogdomain.HalalStatus
+		stock                int
 	}{
-		{"Диван угловой «Кавказ»", "Мебель", "85000.00", catalogdomain.HalalStatusHalal},
-		{"Кухонный гарнитур «Беркат»", "Мебель", "120000.00", catalogdomain.HalalStatusHalal},
-		{"Холодильник Bosch", "Техника", "65000.00", catalogdomain.HalalStatusHalal},
-		{"Подарочный набор (сомнительный поставщик)", "Прочее", "5000.00", catalogdomain.HalalStatusDoubtful},
-		{"Вино столовое", "Напитки", "3000.00", catalogdomain.HalalStatusHaram},
+		{"Диван угловой «Кавказ»", "Мебель", "85000.00", catalogdomain.HalalStatusHalal, 12},
+		{"Кухонный гарнитур «Беркат»", "Мебель", "120000.00", catalogdomain.HalalStatusHalal, 8},
+		{"Холодильник Bosch", "Техника", "65000.00", catalogdomain.HalalStatusHalal, 15},
+		{"Подарочный набор (сомнительный поставщик)", "Прочее", "5000.00", catalogdomain.HalalStatusDoubtful, 6},
+		{"Вино столовое", "Напитки", "3000.00", catalogdomain.HalalStatusHaram, 4},
 	}
 	productIDs := make([]string, 0, len(products))
 	for _, p := range products {
 		cost, _ := money.FromString(p.cost, "RUB")
-		prod, err := catalogdomain.NewProduct(uuid.NewString(), org.ID(), p.name, p.category, cost, p.status)
+		prod, err := catalogdomain.NewProduct(uuid.NewString(), org.ID(), p.name, p.category, cost, p.status, 0)
 		if err != nil {
 			return seedErr("product", err)
 		}
@@ -146,13 +152,23 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		if err != nil {
 			return seedErr("create product", err)
 		}
+		if _, _, err := adjustStockUC.Execute(ctx, catalogapp.AdjustStockInput{
+			OrgID:     org.ID(),
+			ProductID: created.ID(),
+			Delta:     p.stock,
+			Reason:    string(catalogdomain.StockReceipt),
+			Note:      "Поступление на склад (стартовый запас)",
+		}); err != nil {
+			return seedErr("stock receipt", err)
+		}
 		productIDs = append(productIDs, created.ID())
 	}
 
 	// --- Contracts (different states) ----------------------------------------
 	productReader := financinginfra.NewProductReader(productRepo)
 	clientReader := financinginfra.NewClientReader(clientRepo)
-	createUC := financingapp.NewCreateContract(contractRepo, productReader, clientReader, tx)
+	stockReserver := financinginfra.NewStockReserver(stockRepo)
+	createUC := financingapp.NewCreateContract(contractRepo, productReader, clientReader, stockReserver, tx)
 
 	now := time.Now()
 

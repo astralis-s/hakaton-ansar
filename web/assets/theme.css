@@ -451,6 +451,8 @@ textarea.input { height:auto; padding:11px 13px; min-height:80px; resize:vertica
 .compact-chip-strong { background:var(--grad); border-color:transparent; color:#fff; }
 .compact-chip-ok { background:var(--accent-soft); border-color:var(--accent-bd); color:var(--accent); }
 .compact-chip-muted { background:var(--surface-2); border-color:var(--border); color:var(--fg-muted); }
+.delta-pos { color:var(--halal-fg); }
+.delta-neg { color:var(--haram-fg); }
 .compact-fields { display:grid; gap:10px; margin-top:12px; }
 .compact-fields-2 { grid-template-columns:repeat(2, minmax(0, 1fr)); }
 .compact-fields-3 { grid-template-columns:repeat(3, minmax(0, 1fr)); }

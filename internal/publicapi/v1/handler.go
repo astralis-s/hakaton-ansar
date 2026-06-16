@@ -157,6 +157,8 @@ func mapError(err error) error {
 		return apperror.NotFound("client_not_found", "client not found")
 	case errors.Is(err, financingdomain.ErrProductHaram):
 		return apperror.Conflict("product_haram", "cannot create a contract for a haram product")
+	case errors.Is(err, financingdomain.ErrOutOfStock):
+		return apperror.Conflict("out_of_stock", "product is out of stock")
 	case errors.Is(err, financingdomain.ErrDownPaymentTooLarge),
 		errors.Is(err, financingdomain.ErrDownPaymentNegative),
 		errors.Is(err, financingdomain.ErrInstallmentsNotPositive),

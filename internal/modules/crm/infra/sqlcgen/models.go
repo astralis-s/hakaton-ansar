@@ -77,6 +77,7 @@ type Product struct {
 	CostPrice   pgtype.Numeric     `json:"cost_price"`
 	HalalStatus string             `json:"halal_status"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Stock       int32              `json:"stock"`
 }
 
 type Reminder struct {
@@ -95,6 +96,17 @@ type Reminder struct {
 	Status          string             `json:"status"`
 	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
 	CancelledAt     pgtype.Timestamptz `json:"cancelled_at"`
+}
+
+type StockMovement struct {
+	ID           pgtype.UUID        `json:"id"`
+	OrgID        pgtype.UUID        `json:"org_id"`
+	ProductID    pgtype.UUID        `json:"product_id"`
+	Delta        int32              `json:"delta"`
+	Reason       string             `json:"reason"`
+	Note         string             `json:"note"`
+	BalanceAfter int32              `json:"balance_after"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {

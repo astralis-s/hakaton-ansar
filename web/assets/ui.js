@@ -74,6 +74,8 @@
     halal: { halal: 'Халяль', haram: 'Харам', doubtful: 'Сомнительно' },
     halalChip: { halal: 'chip-halal', haram: 'chip-haram', doubtful: 'chip-doubt' },
     reminderType: { call: 'Звонок', delivery: 'Доставка', payment_followup: 'Контакт по платежу' },
+    stockReason: { receipt: 'Поступление', sale: 'Продажа', adjustment: 'Корректировка', writeoff: 'Списание' },
+    stockReasonChip: { receipt: 'chip-halal', sale: 'chip-info', adjustment: 'chip-pending', writeoff: 'chip-haram' },
   };
 
   function Chip(p) {
@@ -83,6 +85,7 @@
     var label = (labels[p.map] && labels[p.map][p.value]) || p.value;
     var cls = 'chip-' + p.value;
     if (p.map === 'halal') cls = labels.halalChip[p.value] || 'chip-info';
+    if (p.map === 'stockReason') cls = labels.stockReasonChip[p.value] || 'chip-info';
     if (p.map === 'reminderStatus' && p.value === 'scheduled') cls = 'chip-pending';
     return html`<${Chip} cls=${cls} label=${label}/>`;
   }

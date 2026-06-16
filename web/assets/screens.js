@@ -353,7 +353,7 @@
       <${Guard} loading=${st.loading || contracts.loading} err=${st.err || contracts.err}>
         ${list.length === 0 ? html`<div class="card"><${ui.Empty} icon="catalog" title="Каталог пуст"/></div>`
           : html`<div class="table-card"><table class="data-table"><thead><tr>
-              <th>Товар</th><th>Категория и статус</th><th>Закупка</th><th>Договоры</th><th>Выдано</th><th></th>
+              <th>Товар</th><th>Категория и статус</th><th>Закупка</th><th>На складе</th><th>Договоры</th><th>Выдано</th><th></th>
             </tr></thead><tbody>${list.map(function (pr) {
               var rel = (contracts.data || []).filter(function (x) { return x.product_id === pr.id; });
               var activeCount = rel.filter(function (x) { return x.status === 'active'; }).length;
@@ -364,7 +364,7 @@
                     <span class="table-avatar table-avatar-icon"><${Icon} name="package" size=${16}/></span>
                     <div>
                       <div class="table-title">${pr.name}</div>
-                      <div class="table-subline">${pr.can_be_financed ? 'Доступен для рассрочки' : 'Недоступен для рассрочки'}</div>
+                      <div class="table-subline">${pr.can_be_financed ? 'Доступен для рассрочки' : (pr.halal_status === 'haram' ? 'Недоступен (харам)' : 'Нет в наличии')}</div>
                     </div>
                   </div>
                 </td>
@@ -378,6 +378,9 @@
                   </div>
                 </td>
                 <td><strong class="table-money amana-num">${fmt.money(pr.cost_price)}</strong></td>
+                <td>
+                  <span class=${'compact-chip amana-num ' + (pr.in_stock ? 'compact-chip-strong' : 'compact-chip-muted')}>${pr.stock} шт</span>
+                </td>
                 <td>
                   <div class="table-metric-pack">
                     <span class="compact-chip compact-chip-strong amana-num">${rel.length}</span>
@@ -393,24 +396,63 @@
     </div>`;
   }
   function ProductModal(p) {
-    var f = useState({ name: '', category: '', cost_price: '', halal_status: 'halal' }), v = f[0], set = f[1];
+    var f = useState({ name: '', category: '', cost_price: '', halal_status: 'halal', stock: '0' }), v = f[0], set = f[1];
     var b = useState(false), busy = b[0], setBusy = b[1];
     function save() {
       if (!v.name.trim() || !v.cost_price.trim()) { p.ctx.toast('Заполните название и цену', true); return; }
+      var stock = parseInt(String(v.stock).replace(/\D/g, ''), 10) || 0;
       setBusy(true);
-      api.createProduct({ name: v.name.trim(), category: v.category.trim(), cost_price: v.cost_price.replace(',', '.').trim(), halal_status: v.halal_status })
+      api.createProduct({ name: v.name.trim(), category: v.category.trim(), cost_price: v.cost_price.replace(',', '.').trim(), halal_status: v.halal_status, stock: stock })
         .then(p.onSaved).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
     }
     var inp = function (k, ph) { return html`<input class="input" value=${v[k]} placeholder=${ph} onInput=${function (e) { var o = {}; o[k] = e.target.value; set(Object.assign({}, v, o)); }}/>`; };
     return html`<${ui.Modal} title="Новый товар" onClose=${p.onClose}>
       <${ui.Field} label="Название">${inp('name', 'Диван угловой')}<//>
       <${ui.Field} label="Категория">${inp('category', 'Мебель')}<//>
-      <${ui.Field} label="Закупочная цена, ₽">${inp('cost_price', '85000')}<//>
+      <div class="grid" style=${{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+        <${ui.Field} label="Закупочная цена, ₽">${inp('cost_price', '85000')}<//>
+        <${ui.Field} label="Остаток на складе, шт">${inp('stock', '0')}<//>
+      </div>
       <${ui.Field} label="Халяль-статус">
         <select class="select" value=${v.halal_status} onChange=${function (e) { set(Object.assign({}, v, { halal_status: e.target.value })); }}>
           <option value="halal">Халяль</option><option value="doubtful">Сомнительно</option><option value="haram">Харам</option></select>
       <//>
       <button class="btn btn-primary btn-block" disabled=${busy} onClick=${save}>${busy ? html`<${ui.Spinner}/>` : 'Сохранить'}</button>
+    <//>`;
+  }
+
+  /* StockModal: receipt (+), writeoff (−), adjustment (±) — logs a movement. */
+  function StockModal(p) {
+    var f = useState({ reason: 'receipt', qty: '', dir: '+', note: '' }), v = f[0], set = f[1];
+    var b = useState(false), busy = b[0], setBusy = b[1];
+    function upd(o) { set(Object.assign({}, v, o)); }
+    function save() {
+      var qty = parseInt(String(v.qty).replace(/\D/g, ''), 10);
+      if (!qty || qty <= 0) { p.ctx.toast('Укажите количество', true); return; }
+      var delta = v.reason === 'receipt' ? qty : v.reason === 'writeoff' ? -qty : (v.dir === '-' ? -qty : qty);
+      setBusy(true);
+      api.adjustStock(p.product.id, { delta: delta, reason: v.reason, note: v.note.trim() })
+        .then(p.onSaved).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
+    }
+    var inp = function (k, ph) { return html`<input class="input" value=${v[k]} placeholder=${ph} onInput=${function (e) { var o = {}; o[k] = e.target.value; upd(o); }}/>`; };
+    return html`<${ui.Modal} title="Движение по складу" onClose=${p.onClose}>
+      <div style=${{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 14 }}>${p.product.name} — сейчас на складе <b class="amana-num">${p.product.stock} шт</b></div>
+      <${ui.Field} label="Операция">
+        <select class="select" value=${v.reason} onChange=${function (e) { upd({ reason: e.target.value }); }}>
+          <option value="receipt">Поступление (+)</option>
+          <option value="writeoff">Списание (−)</option>
+          <option value="adjustment">Корректировка (±)</option>
+        </select>
+      <//>
+      <div class="grid" style=${{ gridTemplateColumns: v.reason === 'adjustment' ? '120px 1fr' : '1fr' }}>
+        ${v.reason === 'adjustment' ? html`<${ui.Field} label="Направление">
+          <select class="select" value=${v.dir} onChange=${function (e) { upd({ dir: e.target.value }); }}>
+            <option value="+">Добавить</option><option value="-">Убавить</option></select>
+        <//>` : null}
+        <${ui.Field} label="Количество, шт">${inp('qty', '5')}<//>
+      </div>
+      <${ui.Field} label="Комментарий (необязательно)">${inp('note', 'Поступление от поставщика')}<//>
+      <button class="btn btn-primary btn-block" disabled=${busy} onClick=${save}>${busy ? html`<${ui.Spinner}/>` : 'Применить'}</button>
     <//>`;
   }
 
@@ -534,6 +576,8 @@
   function ProductCard(ctx) {
     var st = useAsync(function () { return api.getProduct(ctx.route.id); }, [ctx.route.id]);
     var contracts = useAsync(api.listContracts);
+    var moves = useAsync(api.listStockMovements);
+    var m = useState(false), open = m[0], setOpen = m[1];
     return html`<div>
       <div style=${{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
         <button class="icon-btn" onClick=${function () { ctx.go('catalog'); }}><${Icon} name="back" size=${20}/></button>
@@ -546,21 +590,28 @@
           var rel = (contracts.data || []).filter(function (x) { return x.product_id === pr.id; });
           var active = rel.filter(function (x) { return x.status === 'active'; }).length;
           var financed = rel.reduce(function (sum, x) { return sum + parseFloat(x.financed_amount || '0'); }, 0);
+          var prMoves = (moves.data || []).filter(function (x) { return x.product_id === pr.id; });
           return html`<div class="grid" style=${{ gap: 16 }}>
             <div class="card card-pad">
-              <div class="table-primary">
-                <span class="table-avatar table-avatar-icon"><${Icon} name="package" size=${18}/></span>
-                <div>
-                  <div class="page-title" style=${{ fontSize: 24 }}>${pr.name}</div>
-                  <div class="page-sub">${pr.category || 'Категория не указана'}</div>
+              <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                <div class="table-primary">
+                  <span class="table-avatar table-avatar-icon"><${Icon} name="package" size=${18}/></span>
+                  <div>
+                    <div class="page-title" style=${{ fontSize: 24 }}>${pr.name}</div>
+                    <div class="page-sub">${pr.category || 'Категория не указана'}</div>
+                  </div>
                 </div>
+                <button class="btn btn-primary" onClick=${function () { setOpen(true); }}><${Icon} name="truck" size=${16}/> Движение по складу</button>
               </div>
               <div class="compact-chip-group" style=${{ marginTop: 14 }}>
                 <${ui.StatusChip} map="halal" value=${pr.halal_status}/>
+                <span class=${'compact-chip ' + (pr.in_stock ? 'compact-chip-ok' : 'compact-chip-muted')}>${pr.in_stock ? 'В наличии: ' + pr.stock + ' шт' : 'Нет в наличии'}</span>
                 <span class=${'compact-chip ' + (pr.can_be_financed ? 'compact-chip-ok' : 'compact-chip-muted')}>${pr.can_be_financed ? 'Можно оформить в рассрочку' : 'Нельзя оформить в рассрочку'}</span>
               </div>
+              ${!pr.in_stock && pr.halal_status !== 'haram' ? html`<div class="banner banner-warn" style=${{ marginTop: 14 }}><${Icon} name="info" size=${17}/> Товара нет на складе — оформить рассрочку нельзя, пока не пополните остаток.</div>` : null}
               <div class="compact-fields compact-fields-2" style=${{ marginTop: 18 }}>
                 <div class="compact-field"><span>Закупочная цена</span><strong class="amana-num">${fmt.money(pr.cost_price)}</strong></div>
+                <div class="compact-field"><span>На складе</span><strong class="amana-num">${pr.stock} шт</strong></div>
                 <div class="compact-field"><span>Всего договоров</span><strong class="amana-num">${rel.length}</strong></div>
                 <div class="compact-field"><span>Активных договоров</span><strong class="amana-num">${active}</strong></div>
                 <div class="compact-field"><span>Выдано в рассрочку</span><strong class="amana-num">${fmt.money(financed)}</strong></div>
@@ -579,9 +630,25 @@
                       </tr>`;
                     })}</tbody></table>`}
             </div>
+            <div class="table-card">
+              <div class="table-card-head">Движение по складу (товарооборот)</div>
+              ${prMoves.length === 0 ? html`<div class="card"><${ui.Empty} icon="truck" title="Движений пока нет" text="Примите товар на склад, чтобы появилась история"/></div>`
+                : html`<table class="data-table"><thead><tr><th>Дата</th><th>Операция</th><th>Изменение</th><th>Остаток</th><th>Комментарий</th></tr></thead>
+                    <tbody>${prMoves.map(function (x) {
+                      return html`<tr key=${x.id} class="data-row">
+                        <td>${fmt.dateTime(x.created_at)}</td>
+                        <td><${ui.StatusChip} map="stockReason" value=${x.reason}/></td>
+                        <td><strong class=${'amana-num ' + (x.delta >= 0 ? 'delta-pos' : 'delta-neg')}>${x.delta > 0 ? '+' : ''}${x.delta} шт</strong></td>
+                        <td class="amana-num">${x.balance_after} шт</td>
+                        <td style=${{ color: 'var(--fg-muted)' }}>${x.note || '—'}</td>
+                      </tr>`;
+                    })}</tbody></table>`}
+            </div>
           </div>`;
         })()}
       <//>
+      ${open && st.data ? html`<${StockModal} product=${st.data} ctx=${ctx} onClose=${function () { setOpen(false); }}
+        onSaved=${function () { setOpen(false); st.reload(); moves.reload(); ctx.toast('Склад обновлён'); }}/>` : null}
     </div>`;
   }
 
@@ -752,14 +819,21 @@
       <div class="grid" style=${{ gridTemplateColumns: 'repeat(2,1fr)' }}>
         ${(p.products.data || []).map(function (pr) {
           var haram = pr.halal_status === 'haram';
-          return html`<div key=${pr.id} class=${'select-card ' + (p.w.productId === pr.id ? 'sel ' : '') + (haram ? 'disabled' : '')}
-            onClick=${function () { if (!haram) p.set({ productId: pr.id }); }}>
+          var blocked = !pr.can_be_financed; // харам или нет на складе
+          var reason = haram ? 'Договор на «харам» оформить нельзя' : (!pr.in_stock ? 'Нет на складе — пополните остаток' : '');
+          return html`<div key=${pr.id} class=${'select-card ' + (p.w.productId === pr.id ? 'sel ' : '') + (blocked ? 'disabled' : '')}
+            onClick=${function () { if (!blocked) p.set({ productId: pr.id }); }}>
             <div style=${{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
               <div style=${{ fontWeight: 600 }}>${pr.name}</div><${ui.StatusChip} map="halal" value=${pr.halal_status}/></div>
-            <div class="amana-num" style=${{ fontSize: 13, color: 'var(--fg-muted)', marginTop: 4 }}>${fmt.money(pr.cost_price)}</div>
-            ${haram ? html`<div style=${{ fontSize: 12, color: 'var(--haram-fg)', marginTop: 4 }}>Договор на «харам» оформить нельзя</div>` : null}</div>`;
+            <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+              <div class="amana-num" style=${{ fontSize: 13, color: 'var(--fg-muted)' }}>${fmt.money(pr.cost_price)}</div>
+              <span class=${'compact-chip amana-num ' + (pr.in_stock ? 'compact-chip-ok' : 'compact-chip-muted')}>${pr.stock} шт</span>
+            </div>
+            ${reason ? html`<div style=${{ fontSize: 12, color: 'var(--haram-fg)', marginTop: 4 }}>${reason}</div>` : null}</div>`;
         })}
       </div>
+      ${(p.products.data || []).length > 0 && (p.products.data || []).every(function (pr) { return !pr.can_be_financed; })
+        ? html`<div class="banner banner-warn" style=${{ marginTop: 12 }}>Нет товаров, доступных для рассрочки. Пополните склад в разделе «Каталог».</div>` : null}
     <//>`;
   }
   function WizTerms(p) {

@@ -55,6 +55,14 @@ type ClientReader interface {
 	Names(ctx context.Context, orgID string, ids []string) (map[string]string, error)
 }
 
+// StockReserver reserves one unit of a product when a contract is created. It
+// runs inside the contract's transaction (so the stock write and the contract
+// insert commit or roll back together) and returns ErrOutOfStock when no unit is
+// available. Implemented in infra over the catalog stock repository.
+type StockReserver interface {
+	Reserve(ctx context.Context, orgID, productID string) error
+}
+
 // TxManager runs a function inside a single database transaction (the context
 // carries the transaction so repositories enlist transparently).
 type TxManager interface {

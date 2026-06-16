@@ -12,9 +12,9 @@ import (
 )
 
 const createProduct = `-- name: CreateProduct :one
-INSERT INTO products (id, org_id, name, category, cost_price, halal_status)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, org_id, name, category, cost_price, halal_status, created_at
+INSERT INTO products (id, org_id, name, category, cost_price, halal_status, stock)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, org_id, name, category, cost_price, halal_status, created_at, stock
 `
 
 type CreateProductParams struct {
@@ -24,6 +24,7 @@ type CreateProductParams struct {
 	Category    string         `json:"category"`
 	CostPrice   pgtype.Numeric `json:"cost_price"`
 	HalalStatus string         `json:"halal_status"`
+	Stock       int32          `json:"stock"`
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -34,6 +35,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.Category,
 		arg.CostPrice,
 		arg.HalalStatus,
+		arg.Stock,
 	)
 	var i Product
 	err := row.Scan(
@@ -44,12 +46,53 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.CostPrice,
 		&i.HalalStatus,
 		&i.CreatedAt,
+		&i.Stock,
+	)
+	return i, err
+}
+
+const createStockMovement = `-- name: CreateStockMovement :one
+INSERT INTO stock_movements (id, org_id, product_id, delta, reason, note, balance_after)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, org_id, product_id, delta, reason, note, balance_after, created_at
+`
+
+type CreateStockMovementParams struct {
+	ID           pgtype.UUID `json:"id"`
+	OrgID        pgtype.UUID `json:"org_id"`
+	ProductID    pgtype.UUID `json:"product_id"`
+	Delta        int32       `json:"delta"`
+	Reason       string      `json:"reason"`
+	Note         string      `json:"note"`
+	BalanceAfter int32       `json:"balance_after"`
+}
+
+func (q *Queries) CreateStockMovement(ctx context.Context, arg CreateStockMovementParams) (StockMovement, error) {
+	row := q.db.QueryRow(ctx, createStockMovement,
+		arg.ID,
+		arg.OrgID,
+		arg.ProductID,
+		arg.Delta,
+		arg.Reason,
+		arg.Note,
+		arg.BalanceAfter,
+	)
+	var i StockMovement
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.ProductID,
+		&i.Delta,
+		&i.Reason,
+		&i.Note,
+		&i.BalanceAfter,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getProductByID = `-- name: GetProductByID :one
-SELECT id, org_id, name, category, cost_price, halal_status, created_at
+SELECT id, org_id, name, category, cost_price, halal_status, created_at, stock
 FROM products
 WHERE id = $1 AND org_id = $2
 `
@@ -70,12 +113,41 @@ func (q *Queries) GetProductByID(ctx context.Context, arg GetProductByIDParams) 
 		&i.CostPrice,
 		&i.HalalStatus,
 		&i.CreatedAt,
+		&i.Stock,
+	)
+	return i, err
+}
+
+const getProductForUpdate = `-- name: GetProductForUpdate :one
+SELECT id, org_id, name, category, cost_price, halal_status, created_at, stock
+FROM products
+WHERE id = $1 AND org_id = $2
+FOR UPDATE
+`
+
+type GetProductForUpdateParams struct {
+	ID    pgtype.UUID `json:"id"`
+	OrgID pgtype.UUID `json:"org_id"`
+}
+
+func (q *Queries) GetProductForUpdate(ctx context.Context, arg GetProductForUpdateParams) (Product, error) {
+	row := q.db.QueryRow(ctx, getProductForUpdate, arg.ID, arg.OrgID)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.Name,
+		&i.Category,
+		&i.CostPrice,
+		&i.HalalStatus,
+		&i.CreatedAt,
+		&i.Stock,
 	)
 	return i, err
 }
 
 const listProductsByOrg = `-- name: ListProductsByOrg :many
-SELECT id, org_id, name, category, cost_price, halal_status, created_at
+SELECT id, org_id, name, category, cost_price, halal_status, created_at, stock
 FROM products
 WHERE org_id = $1
 ORDER BY created_at DESC
@@ -98,6 +170,7 @@ func (q *Queries) ListProductsByOrg(ctx context.Context, orgID pgtype.UUID) ([]P
 			&i.CostPrice,
 			&i.HalalStatus,
 			&i.CreatedAt,
+			&i.Stock,
 		); err != nil {
 			return nil, err
 		}
@@ -109,11 +182,76 @@ func (q *Queries) ListProductsByOrg(ctx context.Context, orgID pgtype.UUID) ([]P
 	return items, nil
 }
 
+const listStockMovementsByOrg = `-- name: ListStockMovementsByOrg :many
+SELECT id, org_id, product_id, delta, reason, note, balance_after, created_at
+FROM stock_movements
+WHERE org_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListStockMovementsByOrg(ctx context.Context, orgID pgtype.UUID) ([]StockMovement, error) {
+	rows, err := q.db.Query(ctx, listStockMovementsByOrg, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StockMovement{}
+	for rows.Next() {
+		var i StockMovement
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.ProductID,
+			&i.Delta,
+			&i.Reason,
+			&i.Note,
+			&i.BalanceAfter,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setProductStock = `-- name: SetProductStock :one
+UPDATE products
+SET stock = $3
+WHERE id = $1 AND org_id = $2
+RETURNING id, org_id, name, category, cost_price, halal_status, created_at, stock
+`
+
+type SetProductStockParams struct {
+	ID    pgtype.UUID `json:"id"`
+	OrgID pgtype.UUID `json:"org_id"`
+	Stock int32       `json:"stock"`
+}
+
+func (q *Queries) SetProductStock(ctx context.Context, arg SetProductStockParams) (Product, error) {
+	row := q.db.QueryRow(ctx, setProductStock, arg.ID, arg.OrgID, arg.Stock)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.Name,
+		&i.Category,
+		&i.CostPrice,
+		&i.HalalStatus,
+		&i.CreatedAt,
+		&i.Stock,
+	)
+	return i, err
+}
+
 const updateProduct = `-- name: UpdateProduct :one
 UPDATE products
 SET name = $3, category = $4, cost_price = $5, halal_status = $6
 WHERE id = $1 AND org_id = $2
-RETURNING id, org_id, name, category, cost_price, halal_status, created_at
+RETURNING id, org_id, name, category, cost_price, halal_status, created_at, stock
 `
 
 type UpdateProductParams struct {
@@ -143,6 +281,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.CostPrice,
 		&i.HalalStatus,
 		&i.CreatedAt,
+		&i.Stock,
 	)
 	return i, err
 }

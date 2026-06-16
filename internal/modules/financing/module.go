@@ -26,6 +26,7 @@ type Deps struct {
 	ComparisonRatePercent decimal.Decimal
 	Products              domain.ProductReader
 	Clients               domain.ClientReader
+	Stock                 domain.StockReserver
 	OwnerOnly             func(http.Handler) http.Handler
 }
 
@@ -40,7 +41,7 @@ type Module struct {
 func New(d Deps) *Module {
 	contracts := infra.NewContractRepository(d.Pool)
 
-	createContract := app.NewCreateContract(contracts, d.Products, d.Clients, d.Tx)
+	createContract := app.NewCreateContract(contracts, d.Products, d.Clients, d.Stock, d.Tx)
 	getContract := app.NewGetContract(contracts)
 
 	handler := financinghttp.NewHandler(financinghttp.HandlerDeps{

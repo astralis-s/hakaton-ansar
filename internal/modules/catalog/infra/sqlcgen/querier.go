@@ -12,8 +12,12 @@ import (
 
 type Querier interface {
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
+	CreateStockMovement(ctx context.Context, arg CreateStockMovementParams) (StockMovement, error)
 	GetProductByID(ctx context.Context, arg GetProductByIDParams) (Product, error)
+	GetProductForUpdate(ctx context.Context, arg GetProductForUpdateParams) (Product, error)
 	ListProductsByOrg(ctx context.Context, orgID pgtype.UUID) ([]Product, error)
+	ListStockMovementsByOrg(ctx context.Context, orgID pgtype.UUID) ([]StockMovement, error)
+	SetProductStock(ctx context.Context, arg SetProductStockParams) (Product, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 }
 

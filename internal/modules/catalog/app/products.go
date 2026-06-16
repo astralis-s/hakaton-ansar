@@ -25,6 +25,7 @@ type CreateProductInput struct {
 	Category    string
 	CostPrice   money.Money
 	HalalStatus string
+	Stock       int
 }
 
 func (uc *CreateProduct) Execute(ctx context.Context, in CreateProductInput) (domain.Product, error) {
@@ -32,7 +33,7 @@ func (uc *CreateProduct) Execute(ctx context.Context, in CreateProductInput) (do
 	if err != nil {
 		return domain.Product{}, err
 	}
-	product, err := domain.NewProduct(uuid.NewString(), in.OrgID, in.Name, in.Category, in.CostPrice, status)
+	product, err := domain.NewProduct(uuid.NewString(), in.OrgID, in.Name, in.Category, in.CostPrice, status, in.Stock)
 	if err != nil {
 		return domain.Product{}, err
 	}

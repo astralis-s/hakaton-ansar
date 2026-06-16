@@ -30,4 +30,5 @@ var (
 	ErrProductNotFound  = errors.New("product not found")
 	ErrClientNotFound   = errors.New("client not found")
 	ErrProductHaram     = errors.New("cannot create a contract for a haram product")
+	ErrOutOfStock       = errors.New("product is out of stock")
 )
