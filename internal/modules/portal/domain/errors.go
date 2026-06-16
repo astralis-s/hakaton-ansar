@@ -20,6 +20,9 @@ var (
 	ErrMessageBodyRequired = errors.New("message body is required")
 	ErrMessageTooLong     = errors.New("message body is too long")
 
-	ErrClientNotFound = errors.New("client not found")
+	ErrClientNotFound   = errors.New("client not found")
 	ErrContractNotFound = errors.New("contract not found")
+	ErrProductNotFound  = errors.New("product not found")
+	ErrProductHaram     = errors.New("product cannot be financed")
+	ErrInvalidRequest   = errors.New("invalid contract request")
 )

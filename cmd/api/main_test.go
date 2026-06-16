@@ -61,6 +61,8 @@ func newTestRouter() chi.Router {
 		JWTTTL:    0,
 		Clients:   portalinfra.NewClientReader(crmModule.Clients()),
 		Contracts: portalinfra.NewContractReader(financingModule.Contracts()),
+		Catalog:   portalinfra.NewCatalogReader(catalogModule.Products()),
+		Requests:  portalinfra.NewRequestService(financingModule.SubmitRequestUseCase(), financingModule.ListClientRequestsUseCase()),
 	})
 	prayerLoc := schedulingdomain.Location{Lat: 43.3178, Lon: 45.6949, TZ: time.UTC}
 	schedulingModule := scheduling.New(scheduling.Deps{

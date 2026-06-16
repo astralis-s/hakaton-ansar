@@ -139,6 +139,8 @@ func run() error {
 		JWTTTL:    cfg.Auth.JWTTTL,
 		Clients:   portalinfra.NewClientReader(crmModule.Clients()),
 		Contracts: portalinfra.NewContractReader(financingModule.Contracts()),
+		Catalog:   portalinfra.NewCatalogReader(catalogModule.Products()),
+		Requests:  portalinfra.NewRequestService(financingModule.SubmitRequestUseCase(), financingModule.ListClientRequestsUseCase()),
 	})
 
 	prayerLoc := schedulingdomain.Location{Lat: cfg.Prayer.Lat, Lon: cfg.Prayer.Lon, TZ: loadTimezone(cfg.Prayer.Timezone, log)}

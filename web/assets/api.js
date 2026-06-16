@@ -77,6 +77,10 @@
     getPortalAccess: function (clientId) { return request('GET', '/portal-access/' + clientId); },
     setPortalAccess: function (clientId, p) { return request('PUT', '/portal-access/' + clientId, p); },
 
+    listContractRequests: function () { return request('GET', '/contract-requests'); },
+    approveContractRequest: function (id, p) { return request('POST', '/contract-requests/' + id + '/approve', p); },
+    rejectContractRequest: function (id) { return request('POST', '/contract-requests/' + id + '/reject'); },
+
     financeReport: function () { return request('GET', '/finance/report'); },
     listExpenses: function () { return request('GET', '/finance/expenses'); },
     createExpense: function (p) { return request('POST', '/finance/expenses', p); },
@@ -141,6 +145,9 @@
     me: function () { return portalRequest('GET', '/me'); },
     contracts: function () { return portalRequest('GET', '/contracts'); },
     contract: function (id) { return portalRequest('GET', '/contracts/' + id); },
+    products: function () { return portalRequest('GET', '/products'); },
+    requests: function () { return portalRequest('GET', '/requests'); },
+    submitRequest: function (p) { return portalRequest('POST', '/requests', p); },
     messages: function () { return portalRequest('GET', '/messages'); },
     send: function (body) { return portalRequest('POST', '/messages', { body: body }); },
   };

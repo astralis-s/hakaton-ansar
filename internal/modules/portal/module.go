@@ -26,6 +26,8 @@ type Deps struct {
 	JWTTTL    time.Duration
 	Clients   domain.ClientReader
 	Contracts domain.ContractReader
+	Catalog   domain.CatalogReader
+	Requests  domain.RequestService
 }
 
 // Module is the assembled portal module.
@@ -51,6 +53,9 @@ func New(d Deps) *Module {
 		Profile:   app.NewGetClientProfile(d.Clients),
 		Contracts: app.NewGetClientContracts(d.Contracts),
 		Contract:  app.NewGetClientContract(d.Contracts),
+		Browse:    app.NewBrowseProducts(d.Catalog),
+		SubmitReq: app.NewSubmitRequest(d.Requests),
+		MyReqs:    app.NewListMyRequests(d.Requests),
 		Log:       d.Log,
 	})
 	return &Module{handler: handler, clientMW: portalhttp.ClientAuth(tokens, d.Log)}

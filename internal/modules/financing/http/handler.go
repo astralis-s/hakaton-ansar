@@ -28,29 +28,36 @@ type Handler struct {
 	settle    *app.SettleEarly
 	cancel    *app.CancelContract
 	dashboard *app.Dashboard
+	listReq   *app.ListContractRequests
+	approveReq *app.ApproveContractRequest
+	rejectReq *app.RejectContractRequest
 	log       *slog.Logger
 	ownerMW   func(http.Handler) http.Handler
 }
 
 // HandlerDeps groups the use-cases for NewHandler.
 type HandlerDeps struct {
-	Preview   *app.PreviewContract
-	Create    *app.CreateContract
-	Get       *app.GetContract
-	List      *app.ListContracts
-	Pay       *app.RegisterPayment
-	Settle    *app.SettleEarly
-	Cancel    *app.CancelContract
-	Dashboard *app.Dashboard
-	Log       *slog.Logger
-	OwnerOnly func(http.Handler) http.Handler
+	Preview    *app.PreviewContract
+	Create     *app.CreateContract
+	Get        *app.GetContract
+	List       *app.ListContracts
+	Pay        *app.RegisterPayment
+	Settle     *app.SettleEarly
+	Cancel     *app.CancelContract
+	Dashboard  *app.Dashboard
+	ListReq    *app.ListContractRequests
+	ApproveReq *app.ApproveContractRequest
+	RejectReq  *app.RejectContractRequest
+	Log        *slog.Logger
+	OwnerOnly  func(http.Handler) http.Handler
 }
 
 func NewHandler(d HandlerDeps) *Handler {
 	return &Handler{
 		preview: d.Preview, create: d.Create, get: d.Get, list: d.List,
 		pay: d.Pay, settle: d.Settle, cancel: d.Cancel,
-		dashboard: d.Dashboard, log: d.Log, ownerMW: d.OwnerOnly,
+		dashboard: d.Dashboard, listReq: d.ListReq, approveReq: d.ApproveReq, rejectReq: d.RejectReq,
+		log: d.Log, ownerMW: d.OwnerOnly,
 	}
 }
 
@@ -66,6 +73,61 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		cr.Post("/{id}/settle", h.SettleEarly)
 		cr.With(h.ownerMW).Post("/{id}/cancel", h.Cancel)
 	})
+	r.Route("/contract-requests", func(rr chi.Router) {
+		rr.Get("/", h.ListRequests)
+		rr.Post("/{id}/approve", h.ApproveRequest)
+		rr.Post("/{id}/reject", h.RejectRequest)
+	})
+}
+
+// ListRequests returns the org's contract requests (staff inbox).
+func (h *Handler) ListRequests(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	requests, err := h.listReq.Execute(r.Context(), p.OrgID)
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	resp := make([]contractRequestDTO, 0, len(requests))
+	for _, req := range requests {
+		resp = append(resp, toContractRequestDTO(req))
+	}
+	web.JSON(w, http.StatusOK, resp)
+}
+
+// ApproveRequest sets the manager's terms and creates the contract.
+func (h *Handler) ApproveRequest(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	var req approveRequestRequest
+	if err := web.DecodeAndValidate(w, r, &req); err != nil {
+		apperror.Write(w, r, h.log, err)
+		return
+	}
+	cost, markup, down, cadence, start, err := parseTerms(req.CostPrice, req.MarkupAmount, req.MarkupPercent, req.DownPayment, req.Cadence, req.StartDate)
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	contract, err := h.approveReq.Execute(r.Context(), app.ApproveContractRequestInput{
+		OrgID: p.OrgID, RequestID: chi.URLParam(r, "id"),
+		CostPrice: cost, Markup: markup, DownPayment: down,
+		Installments: req.Installments, Cadence: cadence, StartDate: start,
+	})
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusCreated, toContractResponse(contract, time.Now()))
+}
+
+// RejectRequest declines a pending request.
+func (h *Handler) RejectRequest(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	if err := h.rejectReq.Execute(r.Context(), p.OrgID, chi.URLParam(r, "id")); err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusNoContent, nil)
 }
 
 // Dashboard returns the aggregated owner/manager dashboard.
@@ -256,6 +318,12 @@ func mapError(err error) error {
 		return nil
 	case errors.Is(err, domain.ErrContractNotFound):
 		return apperror.NotFound("contract_not_found", "contract not found")
+	case errors.Is(err, domain.ErrRequestNotFound):
+		return apperror.NotFound("request_not_found", "contract request not found")
+	case errors.Is(err, domain.ErrRequestNotPending):
+		return apperror.Conflict("request_not_pending", "заявка уже обработана")
+	case errors.Is(err, domain.ErrDesiredInstallmentsInvalid):
+		return apperror.Invalid("invalid_input", err.Error())
 	case errors.Is(err, domain.ErrProductNotFound):
 		return apperror.NotFound("product_not_found", "product not found")
 	case errors.Is(err, domain.ErrClientNotFound):

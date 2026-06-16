@@ -40,6 +40,19 @@ type registerPaymentRequest struct {
 	Amount string `json:"amount" validate:"required"`
 }
 
+// approveRequestRequest carries the financial terms the manager sets when
+// approving a client's contract request (same shape as creating a contract,
+// minus client/product which come from the request).
+type approveRequestRequest struct {
+	CostPrice     string `json:"cost_price" validate:"required"`
+	MarkupAmount  string `json:"markup_amount"`
+	MarkupPercent string `json:"markup_percent"`
+	DownPayment   string `json:"down_payment"`
+	Installments  int    `json:"installments" validate:"required,min=1"`
+	Cadence       string `json:"cadence" validate:"required,oneof=weekly monthly"`
+	StartDate     string `json:"start_date" validate:"required"`
+}
+
 // --- Responses --------------------------------------------------------------
 
 type installmentDTO struct {
@@ -176,6 +189,34 @@ func toContractResponse(c *domain.Contract, asOf time.Time) contractResponse {
 		Schedule:        schedule,
 		Payments:        payments,
 		CreatedAt:       c.CreatedAt(),
+	}
+}
+
+type contractRequestDTO struct {
+	ID                  string     `json:"id"`
+	ClientID            string     `json:"client_id"`
+	ProductID           string     `json:"product_id"`
+	DesiredInstallments int        `json:"desired_installments"`
+	DesiredDownPayment  string     `json:"desired_down_payment"`
+	Note                string     `json:"note"`
+	Status              string     `json:"status"`
+	ContractID          string     `json:"contract_id"`
+	CreatedAt           time.Time  `json:"created_at"`
+	DecidedAt           *time.Time `json:"decided_at"`
+}
+
+func toContractRequestDTO(r *domain.ContractRequest) contractRequestDTO {
+	return contractRequestDTO{
+		ID:                  r.ID(),
+		ClientID:            r.ClientID(),
+		ProductID:           r.ProductID(),
+		DesiredInstallments: r.DesiredInstallments(),
+		DesiredDownPayment:  r.DesiredDownPayment().String(),
+		Note:                r.Note(),
+		Status:              r.Status().String(),
+		ContractID:          r.ContractID(),
+		CreatedAt:           r.CreatedAt(),
+		DecidedAt:           r.DecidedAt(),
 	}
 }
 

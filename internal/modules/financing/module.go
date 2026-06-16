@@ -35,29 +35,40 @@ type Module struct {
 	handler        *financinghttp.Handler
 	createContract *app.CreateContract
 	getContract    *app.GetContract
+	submitRequest  *app.SubmitContractRequest
+	listClientReqs *app.ListClientRequests
 	contracts      domain.ContractRepository
 }
 
 // New wires the financing module.
 func New(d Deps) *Module {
 	contracts := infra.NewContractRepository(d.Pool)
+	requests := infra.NewRequestRepository(d.Pool)
 
 	createContract := app.NewCreateContract(contracts, d.Products, d.Clients, d.Stock, d.Tx)
 	getContract := app.NewGetContract(contracts)
+	submitRequest := app.NewSubmitContractRequest(requests, d.Products, d.Clients)
+	listClientReqs := app.NewListClientRequests(requests)
 
 	handler := financinghttp.NewHandler(financinghttp.HandlerDeps{
-		Preview:   app.NewPreviewContract(d.ComparisonRatePercent),
-		Create:    createContract,
-		Get:       getContract,
-		List:      app.NewListContracts(contracts),
-		Pay:       app.NewRegisterPayment(contracts, d.Tx),
-		Settle:    app.NewSettleEarly(contracts, d.Tx),
-		Cancel:    app.NewCancelContract(contracts, d.Tx),
-		Dashboard: app.NewDashboard(contracts, d.Clients),
-		Log:       d.Log,
-		OwnerOnly: d.OwnerOnly,
+		Preview:    app.NewPreviewContract(d.ComparisonRatePercent),
+		Create:     createContract,
+		Get:        getContract,
+		List:       app.NewListContracts(contracts),
+		Pay:        app.NewRegisterPayment(contracts, d.Tx),
+		Settle:     app.NewSettleEarly(contracts, d.Tx),
+		Cancel:     app.NewCancelContract(contracts, d.Tx),
+		Dashboard:  app.NewDashboard(contracts, d.Clients),
+		ListReq:    app.NewListContractRequests(requests),
+		ApproveReq: app.NewApproveContractRequest(requests, createContract, d.Tx),
+		RejectReq:  app.NewRejectContractRequest(requests, d.Tx),
+		Log:        d.Log,
+		OwnerOnly:  d.OwnerOnly,
 	})
-	return &Module{handler: handler, createContract: createContract, getContract: getContract, contracts: contracts}
+	return &Module{
+		handler: handler, createContract: createContract, getContract: getContract,
+		submitRequest: submitRequest, listClientReqs: listClientReqs, contracts: contracts,
+	}
 }
 
 // Contracts exposes the contract repository for cross-context reads (the ledger
@@ -75,3 +86,8 @@ func (m *Module) CreateContractUseCase() *app.CreateContract { return m.createCo
 
 // GetContractUseCase exposes the get use-case for the public API.
 func (m *Module) GetContractUseCase() *app.GetContract { return m.getContract }
+
+// SubmitRequestUseCase / ListClientRequestsUseCase expose the client-facing
+// request use-cases so the portal can offer them on its surface.
+func (m *Module) SubmitRequestUseCase() *app.SubmitContractRequest { return m.submitRequest }
+func (m *Module) ListClientRequestsUseCase() *app.ListClientRequests { return m.listClientReqs }

@@ -31,4 +31,10 @@ var (
 	ErrClientNotFound   = errors.New("client not found")
 	ErrProductHaram     = errors.New("cannot create a contract for a haram product")
 	ErrOutOfStock       = errors.New("product is out of stock")
+
+	// Contract requests (заявки).
+	ErrRequestIDRequired          = errors.New("request id is required")
+	ErrRequestNotFound            = errors.New("contract request not found")
+	ErrRequestNotPending          = errors.New("contract request is not pending")
+	ErrDesiredInstallmentsInvalid = errors.New("desired installments must be at least 1")
 )

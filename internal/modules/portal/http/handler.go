@@ -14,6 +14,7 @@ import (
 	"github.com/astralis-s/hakaton-ansar/internal/platform/apperror"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/authctx"
 	"github.com/astralis-s/hakaton-ansar/internal/platform/web"
+	"github.com/astralis-s/hakaton-ansar/internal/shared/money"
 )
 
 // Handler holds the portal use-cases (staff and client sides).
@@ -27,6 +28,9 @@ type Handler struct {
 	profile   *app.GetClientProfile
 	contracts *app.GetClientContracts
 	contract  *app.GetClientContract
+	browse    *app.BrowseProducts
+	submitReq *app.SubmitRequest
+	myReqs    *app.ListMyRequests
 	log       *slog.Logger
 }
 
@@ -40,6 +44,9 @@ type HandlerDeps struct {
 	Profile   *app.GetClientProfile
 	Contracts *app.GetClientContracts
 	Contract  *app.GetClientContract
+	Browse    *app.BrowseProducts
+	SubmitReq *app.SubmitRequest
+	MyReqs    *app.ListMyRequests
 	Log       *slog.Logger
 }
 
@@ -47,7 +54,7 @@ func NewHandler(d HandlerDeps) *Handler {
 	return &Handler{
 		provision: d.Provision, getAccess: d.GetAccess, login: d.Login, send: d.Send,
 		listConv: d.ListConv, thread: d.Thread, profile: d.Profile, contracts: d.Contracts,
-		contract: d.Contract, log: d.Log,
+		contract: d.Contract, browse: d.Browse, submitReq: d.SubmitReq, myReqs: d.MyReqs, log: d.Log,
 	}
 }
 
@@ -75,8 +82,70 @@ func (h *Handler) RegisterProtectedPortalRoutes(r chi.Router) {
 	r.Get("/me", h.Me)
 	r.Get("/contracts", h.MyContracts)
 	r.Get("/contracts/{id}", h.MyContract)
+	r.Get("/products", h.Products)     // catalog the client may request from
+	r.Get("/requests", h.MyRequests)   // the client's own requests
+	r.Post("/requests", h.SubmitRequest)
 	r.Get("/messages", h.MyMessages)
 	r.Post("/messages", h.ClientSend)
+}
+
+func (h *Handler) Products(w http.ResponseWriter, r *http.Request) {
+	p, _ := clientFrom(r.Context())
+	products, err := h.browse.Execute(r.Context(), p.OrgID)
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	resp := make([]productCardResponse, 0, len(products))
+	for _, pr := range products {
+		resp = append(resp, toProductCardResponse(pr))
+	}
+	web.JSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) MyRequests(w http.ResponseWriter, r *http.Request) {
+	p, _ := clientFrom(r.Context())
+	requests, err := h.myReqs.Execute(r.Context(), p.OrgID, p.ClientID)
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	resp := make([]requestViewResponse, 0, len(requests))
+	for _, req := range requests {
+		resp = append(resp, toRequestViewResponse(req))
+	}
+	web.JSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) SubmitRequest(w http.ResponseWriter, r *http.Request) {
+	p, _ := clientFrom(r.Context())
+	var req submitRequestRequest
+	if err := web.DecodeAndValidate(w, r, &req); err != nil {
+		apperror.Write(w, r, h.log, err)
+		return
+	}
+	down := money.Zero(money.DefaultCurrency)
+	if req.DesiredDownPayment != "" {
+		parsed, err := money.FromString(req.DesiredDownPayment, money.DefaultCurrency)
+		if err != nil {
+			apperror.Write(w, r, h.log, apperror.Invalid("invalid_down_payment", "desired_down_payment must be a decimal string"))
+			return
+		}
+		down = parsed
+	}
+	view, err := h.submitReq.Execute(r.Context(), app.SubmitRequestInput{
+		OrgID:               p.OrgID,
+		ClientID:            p.ClientID,
+		ProductID:           req.ProductID,
+		DesiredInstallments: req.DesiredInstallments,
+		DesiredDownPayment:  down,
+		Note:                req.Note,
+	})
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusCreated, toRequestViewResponse(view))
 }
 
 // ---- staff side ------------------------------------------------------------
@@ -261,6 +330,12 @@ func mapError(err error) error {
 		return apperror.NotFound("client_not_found", "client not found")
 	case errors.Is(err, domain.ErrContractNotFound):
 		return apperror.NotFound("contract_not_found", "contract not found")
+	case errors.Is(err, domain.ErrProductNotFound):
+		return apperror.NotFound("product_not_found", "product not found")
+	case errors.Is(err, domain.ErrProductHaram):
+		return apperror.Conflict("product_haram", "этот товар нельзя оформить в рассрочку")
+	case errors.Is(err, domain.ErrInvalidRequest):
+		return apperror.Invalid("invalid_request", "неверные параметры заявки")
 	case errors.Is(err, domain.ErrEmailTaken):
 		return apperror.Conflict("email_taken", "этот email уже используется")
 	case errors.Is(err, domain.ErrInvalidEmail),

@@ -63,6 +63,17 @@ type StockReserver interface {
 	Reserve(ctx context.Context, orgID, productID string) error
 }
 
+// ContractRequestRepository persists client contract requests (заявки),
+// org-scoped.
+type ContractRequestRepository interface {
+	Create(ctx context.Context, r *ContractRequest) error
+	GetByID(ctx context.Context, orgID, id string) (*ContractRequest, error)
+	ListByOrg(ctx context.Context, orgID string) ([]*ContractRequest, error)
+	ListByClient(ctx context.Context, orgID, clientID string) ([]*ContractRequest, error)
+	// Save persists a status transition (approve/reject) of an existing request.
+	Save(ctx context.Context, r *ContractRequest) error
+}
+
 // TxManager runs a function inside a single database transaction (the context
 // carries the transaction so repositories enlist transparently).
 type TxManager interface {

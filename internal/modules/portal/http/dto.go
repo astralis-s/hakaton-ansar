@@ -22,6 +22,13 @@ type sendMessageRequest struct {
 	Body string `json:"body" validate:"required"`
 }
 
+type submitRequestRequest struct {
+	ProductID           string `json:"product_id" validate:"required,uuid"`
+	DesiredInstallments int    `json:"desired_installments" validate:"required,min=1"`
+	DesiredDownPayment  string `json:"desired_down_payment"`
+	Note                string `json:"note"`
+}
+
 // --- responses --------------------------------------------------------------
 
 type loginResponse struct {
@@ -129,6 +136,40 @@ type contractDetailResponse struct {
 	Schedule       []installmentLineResponse `json:"schedule"`
 	Payments       []paymentLineResponse     `json:"payments"`
 	CreatedAt      time.Time                 `json:"created_at"`
+}
+
+type productCardResponse struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Category string `json:"category"`
+}
+
+type requestViewResponse struct {
+	ID                  string    `json:"id"`
+	ProductID           string    `json:"product_id"`
+	DesiredInstallments int       `json:"desired_installments"`
+	DesiredDownPayment  string    `json:"desired_down_payment"`
+	Note                string    `json:"note"`
+	Status              string    `json:"status"`
+	ContractID          string    `json:"contract_id"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+func toProductCardResponse(p domain.ProductCard) productCardResponse {
+	return productCardResponse{ID: p.ID, Name: p.Name, Category: p.Category}
+}
+
+func toRequestViewResponse(r domain.RequestView) requestViewResponse {
+	return requestViewResponse{
+		ID:                  r.ID,
+		ProductID:           r.ProductID,
+		DesiredInstallments: r.DesiredInstallments,
+		DesiredDownPayment:  r.DesiredDownPayment.String(),
+		Note:                r.Note,
+		Status:              r.Status,
+		ContractID:          r.ContractID,
+		CreatedAt:           r.CreatedAt,
+	}
 }
 
 func toContractDetailResponse(d domain.ContractDetail) contractDetailResponse {

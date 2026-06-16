@@ -54,6 +54,20 @@ type Contract struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContractRequest struct {
+	ID                  pgtype.UUID        `json:"id"`
+	OrgID               pgtype.UUID        `json:"org_id"`
+	ClientID            pgtype.UUID        `json:"client_id"`
+	ProductID           pgtype.UUID        `json:"product_id"`
+	DesiredInstallments int32              `json:"desired_installments"`
+	DesiredDownPayment  pgtype.Numeric     `json:"desired_down_payment"`
+	Note                string             `json:"note"`
+	Status              string             `json:"status"`
+	ContractID          pgtype.UUID        `json:"contract_id"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	DecidedAt           pgtype.Timestamptz `json:"decided_at"`
+}
+
 type Conversation struct {
 	ID            pgtype.UUID        `json:"id"`
 	OrgID         pgtype.UUID        `json:"org_id"`

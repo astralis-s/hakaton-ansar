@@ -12,12 +12,17 @@ import (
 
 type Querier interface {
 	CreateContract(ctx context.Context, arg CreateContractParams) error
+	CreateContractRequest(ctx context.Context, arg CreateContractRequestParams) (ContractRequest, error)
 	CreateInstallment(ctx context.Context, arg CreateInstallmentParams) error
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) error
 	GetContractByID(ctx context.Context, arg GetContractByIDParams) (Contract, error)
+	GetContractRequestByID(ctx context.Context, arg GetContractRequestByIDParams) (ContractRequest, error)
+	ListContractRequestsByClient(ctx context.Context, arg ListContractRequestsByClientParams) ([]ContractRequest, error)
+	ListContractRequestsByOrg(ctx context.Context, orgID pgtype.UUID) ([]ContractRequest, error)
 	ListContractsByOrg(ctx context.Context, orgID pgtype.UUID) ([]Contract, error)
 	ListInstallmentsByContract(ctx context.Context, contractID pgtype.UUID) ([]Installment, error)
 	ListPaymentsByContract(ctx context.Context, contractID pgtype.UUID) ([]Payment, error)
+	UpdateContractRequest(ctx context.Context, arg UpdateContractRequestParams) error
 	UpdateContractState(ctx context.Context, arg UpdateContractStateParams) error
 }
 

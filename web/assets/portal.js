@@ -62,6 +62,7 @@
       <div class="portal-tabs">
         <button class=${'tab ' + (active === 'chat' ? 'active' : '')} onClick=${function () { setActive('chat'); }}>Чат с менеджером</button>
         <button class=${'tab ' + (active === 'contracts' ? 'active' : '')} onClick=${function () { setActive('contracts'); }}>Мои рассрочки</button>
+        <button class=${'tab ' + (active === 'requests' ? 'active' : '')} onClick=${function () { setActive('requests'); }}>Оформить рассрочку</button>
       </div>
       <main class="portal-main">
         ${active === 'chat'
@@ -70,6 +71,7 @@
                 load=${api.portal.messages} onSend=${api.portal.send}
                 placeholder="Напишите менеджеру…" emptyText="Задайте вопрос — менеджер ответит здесь."/>
             </div>`
+          : active === 'requests' ? html`<${PortalRequests}/>`
           : html`<${PortalContracts}/>`}
       </main>
     </div>`;
@@ -170,6 +172,97 @@
             </div>` : null}
           </div>`;
         })()}
+    </div>`;
+  }
+
+  function PortalRequests() {
+    var pr = useState({ products: [], loading: true, err: '' }), prod = pr[0], setProd = pr[1];
+    var rq = useState({ list: [], loading: true }), reqs = rq[0], setReqs = rq[1];
+    var fm = useState(null), form = fm[0], setForm = fm[1]; // {productId, installments, down, note}
+    var bz = useState(false), busy = bz[0], setBusy = bz[1];
+    var msg = useState(null), flash = msg[0], setFlash = msg[1];
+
+    function loadReqs() {
+      api.portal.requests().then(function (r) { setReqs({ list: r || [], loading: false }); })
+        .catch(function () { setReqs({ list: [], loading: false }); });
+    }
+    useEffect(function () {
+      api.portal.products().then(function (r) { setProd({ products: r || [], loading: false, err: '' }); })
+        .catch(function (e) { setProd({ products: [], loading: false, err: e.message }); });
+      loadReqs();
+    }, []);
+
+    function openForm(productId) { setFlash(null); setForm({ productId: productId, installments: '6', down: '', note: '' }); }
+    function submit() {
+      if (!form.productId) { setFlash({ err: true, text: 'Выберите товар' }); return; }
+      var inst = parseInt(String(form.installments).replace(/\D/g, ''), 10);
+      if (!inst || inst < 1) { setFlash({ err: true, text: 'Укажите число платежей' }); return; }
+      setBusy(true);
+      api.portal.submitRequest({
+        product_id: form.productId,
+        desired_installments: inst,
+        desired_down_payment: (form.down || '0').replace(',', '.').trim(),
+        note: form.note.trim(),
+      }).then(function () {
+        setBusy(false); setForm(null); setFlash({ err: false, text: 'Заявка отправлена — менеджер свяжется с вами.' }); loadReqs();
+      }).catch(function (e) { setBusy(false); setFlash({ err: true, text: e.message }); });
+    }
+
+    var productName = function (pid) { var x = (prod.products || []).filter(function (p) { return p.id === pid; })[0]; return x ? x.name : ('Товар ' + pid.slice(0, 6)); };
+
+    return html`<div class="grid" style=${{ gap: 16 }}>
+      ${flash ? html`<div class=${'banner ' + (flash.err ? 'banner-warn' : 'banner-accent')}>
+        <${Icon} name=${flash.err ? 'x' : 'check'} size=${17}/> ${flash.text}</div>` : null}
+
+      <div class="card card-pad">
+        <div style=${{ fontWeight: 700, marginBottom: 4 }}>Оформить рассрочку</div>
+        <div class="page-sub" style=${{ marginBottom: 14 }}>Выберите товар — менеджер рассчитает условия по модели мурабаха (без рибы) и оформит договор.</div>
+        ${prod.loading ? html`<${ui.Loading}/>`
+          : prod.err ? html`<div class="banner banner-warn">${prod.err}</div>`
+          : prod.products.length === 0 ? html`<${ui.Empty} icon="catalog" title="Нет доступных товаров" text="Загляните позже."/>`
+          : html`<div class="grid" style=${{ gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
+              ${prod.products.map(function (p) {
+                var selected = form && form.productId === p.id;
+                return html`<button key=${p.id} class=${'select-card ' + (selected ? 'sel' : '')} onClick=${function () { openForm(p.id); }}>
+                  <div style=${{ fontWeight: 600 }}>${p.name}</div>
+                  <div style=${{ fontSize: 12.5, color: 'var(--fg-muted)', marginTop: 3 }}>${p.category || 'Товар'}</div>
+                </button>`;
+              })}
+            </div>`}
+        ${form ? html`<div class="portal-reqform">
+          <div style=${{ fontWeight: 600, marginBottom: 10 }}>Заявка: ${productName(form.productId)}</div>
+          <div class="grid" style=${{ gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <${ui.Field} label="Желаемое число платежей">
+              <input class="input" value=${form.installments} onInput=${function (e) { setForm(Object.assign({}, form, { installments: e.target.value })); }}/>
+            <//>
+            <${ui.Field} label="Первый взнос, ₽ (если есть)">
+              <input class="input" value=${form.down} placeholder="0" onInput=${function (e) { setForm(Object.assign({}, form, { down: e.target.value })); }}/>
+            <//>
+          </div>
+          <${ui.Field} label="Комментарий (необязательно)">
+            <input class="input" value=${form.note} placeholder="Удобное время доставки и т.д." onInput=${function (e) { setForm(Object.assign({}, form, { note: e.target.value })); }}/>
+          <//>
+          <div style=${{ display: 'flex', gap: 8 }}>
+            <button class="btn btn-primary" disabled=${busy} onClick=${submit}>${busy ? html`<${ui.Spinner}/>` : 'Отправить заявку'}</button>
+            <button class="btn btn-ghost" onClick=${function () { setForm(null); }}>Отмена</button>
+          </div>
+        </div>` : null}
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-head">Мои заявки</div>
+        ${reqs.loading ? html`<div class="card"><${ui.Loading}/></div>`
+          : reqs.list.length === 0 ? html`<div class="card"><${ui.Empty} icon="doc" title="Заявок пока нет"/></div>`
+          : html`<table class="data-table"><thead><tr><th>Товар</th><th>Платежей</th><th>Дата</th><th>Статус</th></tr></thead>
+              <tbody>${reqs.list.map(function (r) {
+                return html`<tr key=${r.id} class="data-row">
+                  <td><div class="table-title">${productName(r.product_id)}</div>${r.note ? html`<div class="table-subline">${r.note}</div>` : null}</td>
+                  <td class="amana-num">${r.desired_installments}</td>
+                  <td>${fmt.date(r.created_at)}</td>
+                  <td><${ui.StatusChip} map="requestStatus" value=${r.status}/></td>
+                </tr>`;
+              })}</tbody></table>`}
+      </div>
     </div>`;
   }
 

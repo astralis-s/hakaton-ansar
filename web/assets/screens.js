@@ -1490,6 +1490,118 @@
     return d.toISOString().slice(0, 10);
   }
 
+  /* ================= CONTRACT REQUESTS (заявки) =================
+     Clients submit requests from their portal; staff set the terms here and
+     approve → a real contract is created (financing CreateContract), or reject. */
+  function Requests(ctx) {
+    var st = useAsync(api.listContractRequests);
+    var clients = useAsync(api.listClients);
+    var products = useAsync(api.listProducts);
+    var ap = useState(null), approving = ap[0], setApproving = ap[1];
+    var list = st.data || [];
+    var pending = list.filter(function (r) { return r.status === 'pending'; });
+    var decided = list.filter(function (r) { return r.status !== 'pending'; });
+    var clientName = function (id) { var c = findByID(clients.data, id); return c ? c.full_name : 'Клиент'; };
+    var product = function (id) { return findByID(products.data, id); };
+
+    function reject(r) {
+      ctx.confirm({
+        title: 'Отклонить заявку?', text: clientName(r.client_id) + ' — ' + (product(r.product_id) ? product(r.product_id).name : ''),
+        okLabel: 'Отклонить', danger: true,
+        onOk: function () { api.rejectContractRequest(r.id).then(function () { st.reload(); ctx.toast('Заявка отклонена'); }).catch(function (e) { ctx.toast(e.message, true); }); },
+      });
+    }
+
+    function row(r, withActions) {
+      var pd = product(r.product_id);
+      return html`<tr key=${r.id} class="data-row">
+        <td><div class="table-primary"><span class="table-avatar">${initials(clientName(r.client_id))}</span>
+          <div><div class="table-title">${clientName(r.client_id)}</div>
+            <div class="table-subline">${pd ? pd.name : 'Товар'}${r.note ? ' · ' + r.note : ''}</div></div></div></td>
+        <td class="amana-num">${r.desired_installments} платежей${parseFloat(r.desired_down_payment) > 0 ? html` · взнос ${fmt.money(r.desired_down_payment)}` : ''}</td>
+        <td>${fmt.date(r.created_at)}</td>
+        <td>${withActions
+          ? html`<div style=${{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+              <button class="btn btn-primary btn-sm" onClick=${function () { setApproving(r); }}>Одобрить</button>
+              <button class="btn btn-ghost btn-sm" onClick=${function () { reject(r); }}>Отклонить</button></div>`
+          : (r.status === 'approved'
+              ? html`<button class="btn btn-soft btn-sm" onClick=${function () { ctx.go('contract', r.contract_id); }}>Открыть договор</button>`
+              : html`<${ui.StatusChip} map="requestStatus" value=${r.status}/>`)}</td>
+      </tr>`;
+    }
+
+    return html`<div>
+      <${PageHead} title="Заявки" sub=${pending.length + ' новых из ' + list.length}/>
+      <${Guard} loading=${st.loading || clients.loading || products.loading} err=${st.err || clients.err || products.err}>
+        ${list.length === 0
+          ? html`<div class="card"><${ui.Empty} icon="doc" title="Заявок пока нет" text="Клиенты оставляют заявки из своего портала (раздел «Оформить рассрочку»)."/></div>`
+          : html`<div class="grid" style=${{ gap: 16 }}>
+              <div class="table-card">
+                <div class="table-card-head">Новые заявки${pending.length ? ' · ' + pending.length : ''}</div>
+                ${pending.length === 0 ? html`<div class="card"><${ui.Empty} icon="check" title="Все заявки обработаны"/></div>`
+                  : html`<table class="data-table"><thead><tr><th>Клиент и товар</th><th>Пожелания</th><th>Дата</th><th></th></tr></thead>
+                      <tbody>${pending.map(function (r) { return row(r, true); })}</tbody></table>`}
+              </div>
+              ${decided.length ? html`<div class="table-card">
+                <div class="table-card-head">Обработанные</div>
+                <table class="data-table"><thead><tr><th>Клиент и товар</th><th>Пожелания</th><th>Дата</th><th></th></tr></thead>
+                  <tbody>${decided.map(function (r) { return row(r, false); })}</tbody></table>
+              </div>` : null}
+            </div>`}
+      <//>
+      ${approving ? html`<${ApproveRequestModal} req=${approving} product=${product(approving.product_id)} ctx=${ctx}
+        onClose=${function () { setApproving(null); }}
+        onApproved=${function () { setApproving(null); st.reload(); ctx.toast('Договор создан'); }}/>` : null}
+    </div>`;
+  }
+  function ApproveRequestModal(p) {
+    var f = useState({
+      cost_price: p.product ? p.product.cost_price : '',
+      markupMode: 'sum', markupSum: '15000', markupPct: '15',
+      down: p.req.desired_down_payment && parseFloat(p.req.desired_down_payment) > 0 ? p.req.desired_down_payment : '0',
+      installments: String(p.req.desired_installments || 6),
+      cadence: 'monthly', start: defaultStart(),
+    }), v = f[0], set = f[1];
+    var b = useState(false), busy = b[0], setBusy = b[1];
+    function upd(o) { set(Object.assign({}, v, o)); }
+    function approve() {
+      if (!v.cost_price || !v.cost_price.trim()) { p.ctx.toast('Укажите закупочную цену', true); return; }
+      var body = {
+        cost_price: v.cost_price.replace(',', '.').trim(),
+        down_payment: (v.down || '0').replace(',', '.').trim(),
+        installments: parseInt(String(v.installments).replace(/\D/g, ''), 10) || 1,
+        cadence: v.cadence, start_date: v.start,
+      };
+      if (v.markupMode === 'pct') body.markup_percent = v.markupPct; else body.markup_amount = v.markupSum || '0';
+      setBusy(true);
+      api.approveContractRequest(p.req.id, body).then(p.onApproved).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
+    }
+    var fld = function (k, ph) { return html`<input class="input" value=${v[k]} placeholder=${ph} onInput=${function (e) { var o = {}; o[k] = e.target.value; upd(o); }}/>`; };
+    return html`<${ui.Modal} title="Одобрить заявку" onClose=${p.onClose}>
+      <div style=${{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 14 }}>${p.product ? p.product.name : 'Товар'} — задайте условия мурабахи. Договор создастся сразу в статусе «Активен».</div>
+      <div class="grid" style=${{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+        <${ui.Field} label="Закупочная цена, ₽">${fld('cost_price', '85000')}<//>
+        <${ui.Field} label="Наценка">
+          <div style=${{ display: 'flex', gap: 8 }}>
+            <select class="select" style=${{ width: 110 }} value=${v.markupMode} onChange=${function (e) { upd({ markupMode: e.target.value }); }}>
+              <option value="sum">Сумма ₽</option><option value="pct">Процент %</option></select>
+            ${v.markupMode === 'sum' ? fld('markupSum', '15000') : fld('markupPct', '15')}
+          </div>
+        <//>
+        <${ui.Field} label="Первый взнос, ₽">${fld('down', '0')}<//>
+        <${ui.Field} label="Число платежей">${fld('installments', '6')}<//>
+        <${ui.Field} label="Периодичность">
+          <select class="select" value=${v.cadence} onChange=${function (e) { upd({ cadence: e.target.value }); }}>
+            <option value="monthly">Ежемесячно</option><option value="weekly">Еженедельно</option></select>
+        <//>
+        <${ui.Field} label="Дата первого платежа">
+          <input class="input" type="date" value=${v.start} onInput=${function (e) { upd({ start: e.target.value }); }}/>
+        <//>
+      </div>
+      <button class="btn btn-primary btn-block" disabled=${busy} onClick=${approve}>${busy ? html`<${ui.Spinner}/>` : 'Одобрить и создать договор'}</button>
+    <//>`;
+  }
+
   /* ================= CHAT (staff ↔ clients) =================
      Two-pane inbox: conversation list + the shared ChatThread (which polls). A
      client must be given portal access (in their card) before they can write. */
@@ -1659,6 +1771,6 @@
   }
 
   AM.screens = { dashboard: Dashboard, clients: Clients, client: ClientCard, catalog: Catalog, product: ProductCard, contracts: Contracts, reminder: ReminderCard,
-    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule, finance: Finance, chat: Chat,
+    'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule, finance: Finance, chat: Chat, requests: Requests,
     developers: Developers, settings: Settings };
 })();

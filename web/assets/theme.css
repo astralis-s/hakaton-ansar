@@ -1180,6 +1180,7 @@ textarea.input { height:auto; padding:11px 13px; min-height:80px; resize:vertica
 .portal-next-date { font-weight:600; font-size:13.5px; text-align:right; }
 .portal-progress-row { display:flex; align-items:center; gap:10px; }
 .row-overdue { background:var(--haram-bg); }
+.portal-reqform { margin-top:16px; padding-top:16px; border-top:1px solid var(--border); }
 
 @media (max-width:760px) {
   .chat-layout { grid-template-columns:1fr; }

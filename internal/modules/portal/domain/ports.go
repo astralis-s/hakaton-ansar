@@ -122,6 +122,48 @@ type ContractReader interface {
 	GetForClient(ctx context.Context, orgID, clientID, contractID string) (ContractDetail, error)
 }
 
+// ProductCard is a product as shown to the client when choosing what to request
+// (no cost price — the client only picks the item; the manager quotes terms).
+type ProductCard struct {
+	ID       string
+	Name     string
+	Category string
+}
+
+// CatalogReader lists the products a client may request (halal and in stock).
+type CatalogReader interface {
+	ListAvailable(ctx context.Context, orgID string) ([]ProductCard, error)
+}
+
+// NewRequestInput is a client's contract application.
+type NewRequestInput struct {
+	OrgID               string
+	ClientID            string
+	ProductID           string
+	DesiredInstallments int
+	DesiredDownPayment  money.Money
+	Note                string
+}
+
+// RequestView is the client's read model of one of their submitted requests.
+type RequestView struct {
+	ID                  string
+	ProductID           string
+	DesiredInstallments int
+	DesiredDownPayment  money.Money
+	Note                string
+	Status              string // pending | approved | rejected
+	ContractID          string
+	CreatedAt           time.Time
+}
+
+// RequestService submits and lists a client's contract requests. Implemented in
+// infra over the financing context (the merchant approves and sets terms there).
+type RequestService interface {
+	Submit(ctx context.Context, in NewRequestInput) (RequestView, error)
+	ListForClient(ctx context.Context, orgID, clientID string) ([]RequestView, error)
+}
+
 // TxManager runs a function inside a single database transaction.
 type TxManager interface {
 	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
