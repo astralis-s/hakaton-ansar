@@ -142,7 +142,6 @@ func run() error {
 		Catalog:   portalinfra.NewCatalogReader(catalogModule.Products()),
 		Requests:  portalinfra.NewRequestService(financingModule.SubmitRequestUseCase(), financingModule.ListClientRequestsUseCase()),
 	})
-
 	prayerLoc := schedulingdomain.Location{Lat: cfg.Prayer.Lat, Lon: cfg.Prayer.Lon, TZ: loadTimezone(cfg.Prayer.Timezone, log)}
 	schedulingModule := scheduling.New(scheduling.Deps{
 		Pool:     pool,
@@ -237,17 +236,8 @@ func mountRoutes(r chi.Router, iamModule *iam.Module, catalogModule *catalog.Mod
 			crmModule.RegisterRoutes(pr)
 			financingModule.RegisterRoutes(pr)
 			ledgerModule.RegisterRoutes(pr)
-			portalModule.RegisterStaffRoutes(pr) // staff chat + portal-access
+			portalModule.RegisterStaffRoutes(pr)
 			schedulingModule.RegisterRoutes(pr)
-		})
-	})
-
-	// Client portal API — separate client JWT (kind=client), not staff JWT.
-	r.Route("/api/portal", func(cr chi.Router) {
-		portalModule.RegisterPublicPortalRoutes(cr) // client login
-		cr.Group(func(pr chi.Router) {
-			pr.Use(portalModule.ClientMiddleware())
-			portalModule.RegisterProtectedPortalRoutes(pr)
 		})
 	})
 

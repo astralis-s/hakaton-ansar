@@ -20,19 +20,19 @@ import (
 
 // Handler holds the financing use-cases.
 type Handler struct {
-	preview   *app.PreviewContract
-	create    *app.CreateContract
-	get       *app.GetContract
-	list      *app.ListContracts
-	pay       *app.RegisterPayment
-	settle    *app.SettleEarly
-	cancel    *app.CancelContract
-	dashboard *app.Dashboard
-	listReq   *app.ListContractRequests
+	preview    *app.PreviewContract
+	create     *app.CreateContract
+	get        *app.GetContract
+	list       *app.ListContracts
+	pay        *app.RegisterPayment
+	settle     *app.SettleEarly
+	cancel     *app.CancelContract
+	dashboard  *app.Dashboard
+	listReq    *app.ListContractRequests
 	approveReq *app.ApproveContractRequest
-	rejectReq *app.RejectContractRequest
-	log       *slog.Logger
-	ownerMW   func(http.Handler) http.Handler
+	rejectReq  *app.RejectContractRequest
+	log        *slog.Logger
+	ownerMW    func(http.Handler) http.Handler
 }
 
 // HandlerDeps groups the use-cases for NewHandler.
@@ -72,11 +72,6 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		cr.Post("/{id}/payments", h.RegisterPayment)
 		cr.Post("/{id}/settle", h.SettleEarly)
 		cr.With(h.ownerMW).Post("/{id}/cancel", h.Cancel)
-	})
-	r.Route("/contract-requests", func(rr chi.Router) {
-		rr.Get("/", h.ListRequests)
-		rr.Post("/{id}/approve", h.ApproveRequest)
-		rr.Post("/{id}/reject", h.RejectRequest)
 	})
 }
 

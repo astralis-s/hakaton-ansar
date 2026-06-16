@@ -43,9 +43,6 @@ const (
 	ManagerEmail  = "manager@amana.ru"
 	ManagerPass   = "manager12345"
 	DemoAPIKey    = "amana_demo_marketplace_key_2026"
-	// Demo client portal login (first client).
-	PortalClientEmail = "client@amana.ru"
-	PortalClientPass  = "client12345"
 )
 
 // Config carries the prayer settings the seeder needs for the reminder slots.
@@ -302,39 +299,29 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		}
 	}
 
-	// --- Client portal access + demo chat ------------------------------------
-	portalAccounts := portalinfra.NewAccountRepository(pool)
-	portalClients := portalinfra.NewClientReader(clientRepo)
 	chatRepo := portalinfra.NewChatRepository(pool)
-	provisionUC := portalapp.NewProvisionAccess(portalAccounts, portalClients, portalinfra.NewBcryptHasher())
 	sendMsgUC := portalapp.NewSendMessage(chatRepo, tx)
-
-	if _, err := provisionUC.Execute(ctx, portalapp.ProvisionAccessInput{
-		OrgID:    org.ID(),
-		ClientID: clientIDs[0],
-		Email:    PortalClientEmail,
-		Password: PortalClientPass,
-	}); err != nil {
-		return seedErr("portal access", err)
-	}
-	demoChat := []struct {
-		kind   portaldomain.SenderKind
-		sender string
-		body   string
+	demoChats := []struct {
+		clientIdx int
+		kind      portaldomain.SenderKind
+		senderID  string
+		body      string
 	}{
-		{portaldomain.SenderClient, clientIDs[0], "Ассаламу алейкум! Подскажите, когда удобно забрать диван?"},
-		{portaldomain.SenderStaff, owner.ID(), "Ва алейкум ассалам! Диван готов — можем доставить завтра после Зухр-намаза, иншаАллах."},
-		{portaldomain.SenderClient, clientIDs[0], "Отлично, спасибо! Буду ждать."},
+		{0, portaldomain.SenderClient, clientIDs[0], "Ассаламу алейкум. Хотел уточнить, когда лучше внести следующий платеж?"},
+		{0, portaldomain.SenderStaff, owner.ID(), "Ва алейкум ассалам. На этой неделе до пятницы, чтобы не ушло в просрочку."},
+		{1, portaldomain.SenderClient, clientIDs[1], "Можно ли перенести встречу по кухонному гарнитуру на вечер после намаза?"},
+		{1, portaldomain.SenderStaff, owner.ID(), "Да, поставил на 19:30. Если что, напишите сюда."},
+		{2, portaldomain.SenderStaff, owner.ID(), "Напоминаю: завтра ожидается платеж по договору. Если удобно, подтвердите время."},
 	}
-	for _, msg := range demoChat {
+	for _, msg := range demoChats {
 		if _, err := sendMsgUC.Execute(ctx, portalapp.SendMessageInput{
 			OrgID:      org.ID(),
-			ClientID:   clientIDs[0],
+			ClientID:   clientIDs[msg.clientIdx],
 			SenderKind: msg.kind,
-			SenderID:   msg.sender,
+			SenderID:   msg.senderID,
 			Body:       msg.body,
 		}); err != nil {
-			return seedErr("portal message", err)
+			return seedErr("chat message", err)
 		}
 	}
 
@@ -360,9 +347,8 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		"organization", org.Name(),
 		"owner", OwnerEmail, "owner_password", OwnerPassword,
 		"manager", ManagerEmail, "manager_password", ManagerPass,
-		"portal_client", PortalClientEmail, "portal_client_password", PortalClientPass,
 		"demo_api_key", DemoAPIKey,
-		"clients", len(clientIDs), "products", len(productIDs), "contracts", len(seededContracts), "reminders", len(reminders), "expenses", len(expenses),
+		"clients", len(clientIDs), "products", len(productIDs), "contracts", len(seededContracts), "reminders", len(reminders), "expenses", len(expenses), "chat_messages", len(demoChats),
 	)
 	return nil
 }
