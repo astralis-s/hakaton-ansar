@@ -40,7 +40,7 @@ type DashboardResult struct {
 	Upcoming              []UpcomingItem
 }
 
-const upcomingLimit = 6
+const upcomingLimit = 5
 
 // BuildDashboard aggregates the org's contracts (full aggregates) into the
 // dashboard read model as of `now`. clientNames maps client id → display name.
@@ -49,7 +49,6 @@ func BuildDashboard(now time.Time, contracts []*Contract, clientNames map[string
 	today := dateOnly(now)
 	weekStart := startOfWeek(today)
 	weekEnd := weekStart.AddDate(0, 0, 7)
-	soon := today.AddDate(0, 0, 7) // rolling 7 days for the "upcoming" list
 
 	portfolio := money.Zero(currency)
 	weekExpected := money.Zero(currency)
@@ -84,7 +83,7 @@ func BuildDashboard(now time.Time, contracts []*Contract, clientNames map[string
 					return DashboardResult{}, err
 				}
 			}
-			if v.Status != InstallmentPaid && !due.Before(today) && due.Before(soon) {
+			if v.Status != InstallmentPaid && v.Status != InstallmentOverdue && !due.Before(weekStart) && due.Before(weekEnd) {
 				upcoming = append(upcoming, UpcomingItem{
 					ContractID: c.ID(), ClientID: c.ClientID(), ClientName: clientNames[c.ClientID()],
 					DueDate: v.DueDate, Amount: v.Amount, Status: v.Status,

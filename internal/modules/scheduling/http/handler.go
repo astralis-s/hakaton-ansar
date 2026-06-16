@@ -21,6 +21,10 @@ type Handler struct {
 	schedule *app.ScheduleReminder
 	preview  *app.PreviewSlot
 	list     *app.ListReminders
+	get      *app.GetReminder
+	update   *app.UpdateReminder
+	complete *app.CompleteReminder
+	cancel   *app.CancelReminder
 	log      *slog.Logger
 }
 
@@ -29,11 +33,18 @@ type HandlerDeps struct {
 	Schedule *app.ScheduleReminder
 	Preview  *app.PreviewSlot
 	List     *app.ListReminders
+	Get      *app.GetReminder
+	Update   *app.UpdateReminder
+	Complete *app.CompleteReminder
+	Cancel   *app.CancelReminder
 	Log      *slog.Logger
 }
 
 func NewHandler(d HandlerDeps) *Handler {
-	return &Handler{schedule: d.Schedule, preview: d.Preview, list: d.List, log: d.Log}
+	return &Handler{
+		schedule: d.Schedule, preview: d.Preview, list: d.List, get: d.Get,
+		update: d.Update, complete: d.Complete, cancel: d.Cancel, log: d.Log,
+	}
 }
 
 // RegisterRoutes mounts the scheduling routes (caller provides JWT-protected r).
@@ -41,6 +52,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/schedule", func(sr chi.Router) {
 		sr.Get("/reminders", h.List)
 		sr.Post("/reminders", h.Create)
+		sr.Get("/reminders/{id}", h.Get)
+		sr.Put("/reminders/{id}", h.Update)
+		sr.Post("/reminders/{id}/complete", h.Complete)
+		sr.Post("/reminders/{id}/cancel", h.Cancel)
 		sr.Post("/preview", h.Preview)
 	})
 }
@@ -101,6 +116,60 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	web.JSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	reminder, err := h.get.Execute(r.Context(), p.OrgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusOK, toReminderResponse(reminder))
+}
+
+func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	var req updateReminderRequest
+	if err := web.DecodeAndValidate(w, r, &req); err != nil {
+		apperror.Write(w, r, h.log, err)
+		return
+	}
+	desiredAt, err := time.Parse(time.RFC3339, req.DesiredAt)
+	if err != nil {
+		apperror.Write(w, r, h.log, apperror.Invalid("invalid_desired_at", "desired_at must be an RFC3339 timestamp"))
+		return
+	}
+	reminder, err := h.update.Execute(r.Context(), app.UpdateReminderInput{
+		OrgID: p.OrgID, ReminderID: chi.URLParam(r, "id"), Type: req.Type,
+		ClientID: req.ClientID, ContractID: req.ContractID, Note: req.Note,
+		DesiredAt: desiredAt, DurationMinutes: req.DurationMinutes,
+	})
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusOK, toReminderResponse(reminder))
+}
+
+func (h *Handler) Complete(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	reminder, err := h.complete.Execute(r.Context(), p.OrgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusOK, toReminderResponse(reminder))
+}
+
+func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
+	p, _ := authctx.From(r.Context())
+	reminder, err := h.cancel.Execute(r.Context(), p.OrgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apperror.Write(w, r, h.log, mapError(err))
+		return
+	}
+	web.JSON(w, http.StatusOK, toReminderResponse(reminder))
+}
+
 func mapError(err error) error {
 	var ae *apperror.Error
 	if errors.As(err, &ae) {
@@ -111,7 +180,9 @@ func mapError(err error) error {
 		return nil
 	case errors.Is(err, domain.ErrReminderNotFound):
 		return apperror.NotFound("reminder_not_found", "reminder not found")
-	case errors.Is(err, domain.ErrInvalidReminderType):
+	case errors.Is(err, domain.ErrInvalidReminderType),
+		errors.Is(err, domain.ErrReminderAlreadyDone),
+		errors.Is(err, domain.ErrReminderCancelled):
 		return apperror.Invalid("invalid_input", err.Error())
 	default:
 		return apperror.Internal("scheduling operation failed", err)

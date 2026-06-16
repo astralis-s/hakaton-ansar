@@ -108,6 +108,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		{"Магомед Алиев", "+7 928 000-11-22", "96 00 123456"},
 		{"Хеда Юсупова", "+7 928 000-33-44", "96 01 654321"},
 		{"Рустам Бараев", "+7 928 000-55-66", "96 02 112233"},
+		{"Зарема Бисултанова", "+7 928 000-77-88", "96 03 778899"},
+		{"Тамерлан Мусаев", "+7 928 000-99-00", "96 04 445566"},
+		{"Мадина Абдулкеримова", "+7 928 000-12-34", "96 05 223344"},
 	}
 	clientIDs := make([]string, 0, len(clients))
 	for _, c := range clients {
@@ -151,47 +154,119 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 	productReader := financinginfra.NewProductReader(productRepo)
 	clientReader := financinginfra.NewClientReader(clientRepo)
 	createUC := financingapp.NewCreateContract(contractRepo, productReader, clientReader, tx)
-	payUC := financingapp.NewRegisterPayment(contractRepo, tx)
 	charityUC := financingapp.NewAccrueLateCharity(contractRepo, charityRepo)
 
 	now := time.Now()
 
-	// 1) Active, partially paid (down 30000 + one 20000 payment).
-	c1, err := createUC.Execute(ctx, financingapp.CreateContractInput{
-		OrgID: org.ID(), ClientID: clientIDs[0], ProductID: productIDs[0],
-		CostPrice: rub("85000.00"), Markup: markup("17000.00"), DownPayment: rub("25000.00"),
-		Installments: 6, Cadence: financingdomain.CadenceMonthly, StartDate: monthsFrom(now, 1),
-	})
-	if err != nil {
-		return seedErr("contract 1", err)
+	type contractSeed struct {
+		label            string
+		clientIdx        int
+		productIdx       int
+		cost             string
+		markup           string
+		down             string
+		startDate        time.Time
+		paidInstallments int
+		charityAmount    string
+		charityNote      string
 	}
-	if _, err := payUC.Execute(ctx, financingapp.RegisterPaymentInput{OrgID: org.ID(), ContractID: c1.ID(), Amount: rub("20000.00")}); err != nil {
-		return seedErr("contract 1 payment", err)
+	seeds := []contractSeed{
+		{
+			label:            "contract adam 1",
+			clientIdx:        0,
+			productIdx:       0,
+			cost:             "85000.00",
+			markup:           "15000.00",
+			down:             "10000.00",
+			startDate:        weekDate(now, time.Monday).AddDate(0, 0, -9*7),
+			paidInstallments: 6,
+		},
+		{
+			label:            "contract adam 2",
+			clientIdx:        1,
+			productIdx:       1,
+			cost:             "120000.00",
+			markup:           "18000.00",
+			down:             "18000.00",
+			startDate:        weekDate(now, time.Wednesday).AddDate(0, 0, -8*7),
+			paidInstallments: 7,
+			charityAmount:    "500.00",
+			charityNote:      "Просрочка платежа — садака на благотворительность",
+		},
+		{
+			label:            "contract adam 3",
+			clientIdx:        2,
+			productIdx:       2,
+			cost:             "65000.00",
+			markup:           "9750.00",
+			down:             "15000.00",
+			startDate:        weekDate(now, time.Thursday).AddDate(0, 0, -8*7),
+			paidInstallments: 8,
+		},
+		{
+			label:            "contract adam 4",
+			clientIdx:        3,
+			productIdx:       0,
+			cost:             "91000.00",
+			markup:           "14000.00",
+			down:             "15000.00",
+			startDate:        weekDate(now, time.Friday).AddDate(0, 0, -8*7),
+			paidInstallments: 8,
+		},
+		{
+			label:            "contract adam 5",
+			clientIdx:        4,
+			productIdx:       1,
+			cost:             "134000.00",
+			markup:           "19000.00",
+			down:             "24000.00",
+			startDate:        weekDate(now, time.Saturday).AddDate(0, 0, -8*7),
+			paidInstallments: 8,
+		},
+		{
+			label:            "contract adam 6",
+			clientIdx:        5,
+			productIdx:       2,
+			cost:             "78000.00",
+			markup:           "12000.00",
+			down:             "10000.00",
+			startDate:        weekDate(now, time.Sunday).AddDate(0, 0, -8*7),
+			paidInstallments: 8,
+		},
 	}
 
-	// 2) Overdue (started 8 months ago, unpaid) with an accrued sadaqa charge.
-	c2, err := createUC.Execute(ctx, financingapp.CreateContractInput{
-		OrgID: org.ID(), ClientID: clientIDs[1], ProductID: productIDs[1],
-		CostPrice: rub("120000.00"), Markup: markup("24000.00"), DownPayment: rub("0"),
-		Installments: 12, Cadence: financingdomain.CadenceMonthly, StartDate: monthsFrom(now, -8),
-	})
-	if err != nil {
-		return seedErr("contract 2", err)
-	}
-	if _, err := charityUC.Execute(ctx, financingapp.AccrueLateCharityInput{
-		OrgID: org.ID(), ContractID: c2.ID(), Amount: rub("500.00"),
-		Note: "Просрочка платежа — садака на благотворительность", CreatedBy: owner.ID(),
-	}); err != nil {
-		return seedErr("contract 2 charity", err)
-	}
+	seededContracts := make([]*financingdomain.Contract, 0, len(seeds))
+	for _, s := range seeds {
+		contract, err := createUC.Execute(ctx, financingapp.CreateContractInput{
+			OrgID:        org.ID(),
+			ClientID:     clientIDs[s.clientIdx],
+			ProductID:    productIDs[s.productIdx],
+			CostPrice:    rub(s.cost),
+			Markup:       markup(s.markup),
+			DownPayment:  rub(s.down),
+			Installments: 10,
+			Cadence:      financingdomain.CadenceWeekly,
+			StartDate:    s.startDate,
+		})
+		if err != nil {
+			return seedErr(s.label, err)
+		}
 
-	// 3) Fresh active contract, no payments yet.
-	if _, err := createUC.Execute(ctx, financingapp.CreateContractInput{
-		OrgID: org.ID(), ClientID: clientIDs[2], ProductID: productIDs[2],
-		CostPrice: rub("65000.00"), Markup: markup("9750.00"), DownPayment: rub("15000.00"),
-		Installments: 5, Cadence: financingdomain.CadenceMonthly, StartDate: monthsFrom(now, 1),
-	}); err != nil {
-		return seedErr("contract 3", err)
+		if err := seedHistoricInstallmentPayments(ctx, tx, contractRepo, contract, s.paidInstallments); err != nil {
+			return seedErr(s.label+" payments", err)
+		}
+		if s.charityAmount != "" {
+			if _, err := charityUC.Execute(ctx, financingapp.AccrueLateCharityInput{
+				OrgID:      org.ID(),
+				ContractID: contract.ID(),
+				Amount:     rub(s.charityAmount),
+				Note:       s.charityNote,
+				CreatedBy:  owner.ID(),
+			}); err != nil {
+				return seedErr(s.label+" charity", err)
+			}
+		}
+		seededContracts = append(seededContracts, contract)
 	}
 
 	// --- Reminders (namaz-aware) ---------------------------------------------
@@ -201,9 +276,10 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 	scheduleUC := schedulingapp.NewScheduleReminder(scheduler, reminderRepo)
 
 	reminders := []schedulingapp.ScheduleReminderInput{
-		{OrgID: org.ID(), Type: "delivery", ClientID: clientIDs[0], ContractID: c1.ID(), Note: "Доставка дивана", DesiredAt: nextFriday(cfg.Timezone, 13, 0), DurationMinutes: 90},
-		{OrgID: org.ID(), Type: "payment_followup", ClientID: clientIDs[1], ContractID: c2.ID(), Note: "Напомнить о платеже", DesiredAt: tomorrowAt(cfg.Timezone, 16, 5), DurationMinutes: 15},
-		{OrgID: org.ID(), Type: "call", ClientID: clientIDs[2], Note: "Уточнить адрес доставки", DesiredAt: tomorrowAt(cfg.Timezone, 10, 0), DurationMinutes: 0},
+		{OrgID: org.ID(), Type: "call", ClientID: clientIDs[0], ContractID: seededContracts[0].ID(), Note: "Подтвердить готовность к оплате", DesiredAt: todayAt(cfg.Timezone, 9, 30), DurationMinutes: 15},
+		{OrgID: org.ID(), Type: "payment_followup", ClientID: clientIDs[1], ContractID: seededContracts[1].ID(), Note: "Напомнить о просроченном платеже", DesiredAt: todayAt(cfg.Timezone, 13, 0), DurationMinutes: 20},
+		{OrgID: org.ID(), Type: "delivery", ClientID: clientIDs[2], ContractID: seededContracts[2].ID(), Note: "Согласовать доставку холодильника", DesiredAt: todayAt(cfg.Timezone, 16, 5), DurationMinutes: 45},
+		{OrgID: org.ID(), Type: "call", ClientID: clientIDs[3], ContractID: seededContracts[3].ID(), Note: "Проверить поступление перевода", DesiredAt: todayAt(cfg.Timezone, 18, 10), DurationMinutes: 10},
 	}
 	for i, in := range reminders {
 		if _, err := scheduleUC.Execute(ctx, in); err != nil {
@@ -216,8 +292,35 @@ func Run(ctx context.Context, pool *pgxpool.Pool, cfg Config, log *slog.Logger) 
 		"owner", OwnerEmail, "owner_password", OwnerPassword,
 		"manager", ManagerEmail, "manager_password", ManagerPass,
 		"demo_api_key", DemoAPIKey,
-		"clients", len(clientIDs), "products", len(productIDs), "contracts", 3, "reminders", len(reminders),
+		"clients", len(clientIDs), "products", len(productIDs), "contracts", len(seededContracts), "reminders", len(reminders),
 	)
+	return nil
+}
+
+func seedHistoricInstallmentPayments(ctx context.Context, tx financingdomain.TxManager, repo financingdomain.ContractRepository, contract *financingdomain.Contract, paidInstallments int) error {
+	if paidInstallments <= 0 {
+		return nil
+	}
+	schedule := contract.Schedule()
+	if paidInstallments > len(schedule) {
+		paidInstallments = len(schedule)
+	}
+	for i := 0; i < paidInstallments; i++ {
+		amount := schedule[i].Amount()
+		paidAt := schedule[i].DueDate().Add(24 * time.Hour)
+		if err := tx.WithinTx(ctx, func(ctx context.Context) error {
+			if err := contract.RegisterPayment(uuid.NewString(), amount, paidAt); err != nil {
+				return err
+			}
+			payments := contract.Payments()
+			if err := repo.AddPayment(ctx, contract.ID(), payments[len(payments)-1]); err != nil {
+				return err
+			}
+			return repo.SaveState(ctx, contract)
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -244,11 +347,32 @@ func monthsFrom(t time.Time, n int) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
+func weekDate(t time.Time, weekday time.Weekday) time.Time {
+	start := seedWeekStart(t)
+	offset := (int(weekday) + 6) % 7
+	return start.AddDate(0, 0, offset)
+}
+
+func seedWeekStart(t time.Time) time.Time {
+	u := t.UTC()
+	day := time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, time.UTC)
+	delta := (int(day.Weekday()) + 6) % 7
+	return day.AddDate(0, 0, -delta)
+}
+
 func tomorrowAt(tz *time.Location, hour, min int) time.Time {
 	if tz == nil {
 		tz = time.UTC
 	}
 	t := time.Now().In(tz).AddDate(0, 0, 1)
+	return time.Date(t.Year(), t.Month(), t.Day(), hour, min, 0, 0, tz)
+}
+
+func todayAt(tz *time.Location, hour, min int) time.Time {
+	if tz == nil {
+		tz = time.UTC
+	}
+	t := time.Now().In(tz)
 	return time.Date(t.Year(), t.Month(), t.Day(), hour, min, 0, 0, tz)
 }
 

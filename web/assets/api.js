@@ -71,7 +71,11 @@
     listCharity: function () { return request('GET', '/charity'); },
 
     listReminders: function () { return request('GET', '/schedule/reminders'); },
+    getReminder: function (id) { return request('GET', '/schedule/reminders/' + id); },
     createReminder: function (p) { return request('POST', '/schedule/reminders', p); },
+    updateReminder: function (id, p) { return request('PUT', '/schedule/reminders/' + id, p); },
+    completeReminder: function (id) { return request('POST', '/schedule/reminders/' + id + '/complete'); },
+    cancelReminder: function (id) { return request('POST', '/schedule/reminders/' + id + '/cancel'); },
     previewSlot: function (p) { return request('POST', '/schedule/preview', p); },
 
     listApiKeys: function () { return request('GET', '/api-keys'); },

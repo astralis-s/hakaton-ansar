@@ -44,6 +44,14 @@ func Timestamp(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
+// NullableTimestamp wraps an optional time as pgtype.Timestamptz.
+func NullableTimestamp(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return Timestamp(*t)
+}
+
 // TimeValue returns the time.Time of a pgtype.Timestamptz (zero if null).
 func TimeValue(ts pgtype.Timestamptz) time.Time { return ts.Time }
 

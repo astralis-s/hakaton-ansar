@@ -41,20 +41,49 @@
   function Dashboard(ctx) {
     var dash = useAsync(api.dashboard);     // overdue + week + portfolio (one source)
     var rem = useAsync(api.listReminders);  // today's agenda (separate source)
+    var charity = useAsync(api.listCharity);
     var qp = useState(false), quickPay = qp[0], setQuickPay = qp[1];
     var cm = useState(false), clientOpen = cm[0], setClientOpen = cm[1];
+    var ab = useState({}), agendaBusy = ab[0], setAgendaBusy = ab[1];
+    var agenda = agendaForToday(rem.data || []);
+    function quickReminderAction(reminder, action) {
+      setAgendaBusy(function (prev) {
+        var next = Object.assign({}, prev);
+        next[reminder.id] = action;
+        return next;
+      });
+      var req = action === 'complete' ? api.completeReminder(reminder.id) : api.cancelReminder(reminder.id);
+      req.then(function () {
+        setAgendaBusy(function (prev) {
+          var next = Object.assign({}, prev);
+          delete next[reminder.id];
+          return next;
+        });
+        rem.reload();
+        ctx.toast(action === 'complete' ? 'Задача выполнена' : 'Задача отменена');
+      }).catch(function (e) {
+        setAgendaBusy(function (prev) {
+          var next = Object.assign({}, prev);
+          delete next[reminder.id];
+          return next;
+        });
+        ctx.toast(e.message, true);
+      });
+    }
 
-    var head = html`<${PageHead} title="Дашборд" sub="Что горит, что делать сегодня и сколько придёт"
+    var head = html`<${PageHead} title="Дашборд" sub="Просрочки, платежи на неделю и задачи на сегодня"
       actions=${html`<button class="btn btn-primary" onClick=${function () { ctx.go('contract-new'); }}><${Icon} name="plus" size=${17}/> Новый договор</button>`}/>`;
 
     if (dash.loading && !dash.data) {
       return html`<div>${head}
-        <div class="grid" style=${{ gap: 16 }}>
-          <div class="card card-pad"><${ui.Skeleton} h=${22} w="40%"/><div style=${{ height: 12 }}></div>
-            <${ui.Skeleton} h=${48} style=${{ marginBottom: 10 }}/><${ui.Skeleton} h=${48}/></div>
-          <div class="grid" style=${{ gridTemplateColumns: '1.5fr 1fr' }}>
-            <div class="card card-pad"><${ui.Skeleton} h=${22} w="50%"/><div style=${{ height: 14 }}></div><${ui.Skeleton} h=${60}/></div>
-            <div class="card card-pad"><${ui.Skeleton} h=${40} w="70%"/><div style=${{ height: 14 }}></div><${ui.Skeleton} h=${40}/></div>
+        <div class="grid" style=${{ gap: 18 }}>
+          <div class="dash-grid-main">
+            <section class="dash-panel dash-loading"><${ui.Skeleton} h=${18} w="22%"/><div style=${{ height: 14 }}></div><${ui.Skeleton} h=${58} style=${{ marginBottom: 10 }}/><${ui.Skeleton} h=${58} style=${{ marginBottom: 10 }}/><${ui.Skeleton} h=${58}/></section>
+            <section class="dash-panel dash-loading"><${ui.Skeleton} h=${18} w="34%"/><div style=${{ height: 14 }}></div><${ui.Skeleton} h=${88} style=${{ marginBottom: 12 }}/><${ui.Skeleton} h=${42} style=${{ marginBottom: 8 }}/><${ui.Skeleton} h=${42}/></section>
+          </div>
+          <div class="dash-grid-lower">
+            <section class="dash-panel dash-loading"><${ui.Skeleton} h=${18} w="30%"/><div style=${{ height: 14 }}></div><${ui.Skeleton} h=${52} style=${{ marginBottom: 8 }}/><${ui.Skeleton} h=${52}/></section>
+            <section class="dash-panel dash-loading"><${ui.Skeleton} h=${18} w="32%"/><div style=${{ height: 14 }}></div><${ui.Skeleton} h=${104}/></section>
           </div>
         </div></div>`;
     }
@@ -63,108 +92,161 @@
     var emptyOrg = d && d.portfolio.active_contracts === 0 && d.overdue.length === 0 && d.week.upcoming.length === 0;
     if (emptyOrg) {
       return html`<div>${head}
-        <div class="card" style=${{ padding: '20px' }}>
+        <section class="dash-panel dash-panel-empty">
           <${ui.Empty} icon="contracts" title="Добро пожаловать в «Аману»"
-            text="Здесь появятся просрочки, поток платежей и задачи на день. Начните с клиента и первого договора."
+            text="После создания клиентов и договоров здесь появятся просрочки, ближайшие платежи и задачи на сегодня."
             action=${html`<div style=${{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
               <button class="btn btn-ghost" onClick=${function () { setClientOpen(true); }}><${Icon} name="clients" size=${17}/> Новый клиент</button>
               <button class="btn btn-primary" onClick=${function () { ctx.go('contract-new'); }}><${Icon} name="plus" size=${17}/> Новый договор</button>
             </div>`}/>
-        </div>
+        </section>
         ${clientOpen ? html`<${ClientModal} ctx=${ctx} onClose=${function () { setClientOpen(false); }} onSaved=${function () { setClientOpen(false); ctx.toast('Клиент добавлен'); }}/>` : null}
       </div>`;
     }
 
+    var rate = weekRate(d);
+    var charityTotal = charity.data ? fmt.money(charity.data.total_amount) : '—';
+
     return html`<div>
       ${head}
 
-      <!-- 1. OVERDUE — loudest -->
       ${dash.err ? html`<${ui.BlockError} message=${'Не удалось загрузить сводку: ' + dash.err} onRetry=${dash.reload}/>`
-        : (d && d.overdue.length > 0
-          ? html`<div class="card card-pad overdue-card" style=${{ marginBottom: 16 }}>
-              <div class="head" style=${{ marginBottom: 12 }}><${Icon} name="clock" size=${19}/> Требуют внимания — просрочка
-                <span style=${{ marginLeft: 'auto', fontSize: 13, fontWeight: 600, color: 'var(--st-over-fg)' }}>${d.overdue.length}</span></div>
-              ${d.overdue.map(function (o) {
-                return html`<div key=${o.contract_id} class="over-row" tabindex="0" role="button"
-                  onClick=${function () { ctx.go('contract', o.contract_id); }}
-                  onKeyDown=${function (e) { if (e.key === 'Enter') ctx.go('contract', o.contract_id); }}>
-                  <div style=${{ flex: 1, minWidth: 0 }}>
-                    <div style=${{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>${o.client_name || 'Клиент'}</div>
-                    <div style=${{ fontSize: 12.5, color: 'var(--fg-subtle)' }}>к получению</div>
-                  </div>
-                  <div class="amana-num" style=${{ fontWeight: 700, fontSize: 15.5 }}>${fmt.money(o.outstanding)}</div>
-                  <span class="days-badge amana-num">${o.days_overdue} дн.</span>
-                  <${Icon} name="arrow" size=${17} style=${{ color: 'var(--fg-subtle)' }}/>
-                </div>`;
-              })}
-            </div>`
-          : html`<div class="banner banner-accent" style=${{ marginBottom: 16 }}><${Icon} name="check" size=${18}/> Просрочек нет — все платежи в графике.</div>`)}
-
-      <!-- 2. THIS WEEK + 4. PORTFOLIO / quick actions -->
-      ${dash.err ? null : html`<div class="grid" style=${{ gridTemplateColumns: '1.5fr 1fr', marginBottom: 16 }}>
-        <div class="card card-pad">
-          <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6 }}>
-            <div style=${{ fontWeight: 700 }}>К получению на этой неделе</div>
-            <div class="amana-num" style=${{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>${weekRate(d)}% собрано</div>
-          </div>
-          <div class="amana-num" style=${{ fontSize: 27, fontWeight: 700, letterSpacing: '-.02em' }}>${fmt.money(d.week.expected)}</div>
-          <div style=${{ color: 'var(--fg-muted)', fontSize: 13.5, marginBottom: 12 }}>получено <b class="amana-num" style=${{ color: 'var(--fg)' }}>${fmt.money(d.week.collected)}</b></div>
-          <div class="progress" style=${{ height: 9, marginBottom: 16 }}><i style=${{ width: weekRate(d) + '%' }}></i></div>
-          ${d.week.upcoming.length === 0
-            ? html`<div style=${{ fontSize: 13.5, color: 'var(--fg-subtle)' }}>На ближайшие дни платежей не запланировано.</div>`
-            : html`<div>${d.week.upcoming.map(function (u) {
-                return html`<div key=${u.contract_id + u.due_date} class="timeline-row row-link" onClick=${function () { ctx.go('contract', u.contract_id); }}>
-                  <div style=${{ flex: 1, minWidth: 0 }}><div style=${{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>${u.client_name || 'Клиент'}</div>
-                    <div style=${{ fontSize: 12.5, color: 'var(--fg-subtle)' }}>${fmt.date(u.due_date)}</div></div>
-                  <div class="amana-num" style=${{ fontWeight: 600, marginRight: 10 }}>${fmt.money(u.amount)}</div>
-                  <${ui.StatusChip} map="installmentStatus" value=${u.status}/></div>`;
-              })}</div>`}
-        </div>
-        <div>
-          <div class="card card-pad" style=${{ marginBottom: 16 }}>
-            <div style=${{ fontSize: 13, color: 'var(--fg-subtle)', marginBottom: 4 }}>Портфель · к получению</div>
-            <div class="amana-num" style=${{ fontSize: 30, fontWeight: 700, letterSpacing: '-.02em' }}>${fmt.money(d.portfolio.outstanding)}</div>
-            <div style=${{ color: 'var(--fg-muted)', fontSize: 13.5, marginTop: 4 }}>${d.portfolio.active_contracts} ${plural(d.portfolio.active_contracts, 'активный договор', 'активных договора', 'активных договоров')}</div>
-          </div>
-          <div class="card card-pad">
-            <div style=${{ fontWeight: 700, marginBottom: 12 }}>Быстрые действия</div>
-            <div style=${{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              <button class="btn btn-primary btn-block" onClick=${function () { ctx.go('contract-new'); }}><${Icon} name="plus" size=${17}/> Новый договор</button>
-              <button class="btn btn-ghost btn-block" onClick=${function () { setClientOpen(true); }}><${Icon} name="clients" size=${17}/> Новый клиент</button>
-              <button class="btn btn-ghost btn-block" onClick=${function () { setQuickPay(true); }}><${Icon} name="coins" size=${17}/> Принять платёж</button>
-            </div>
-          </div>
-        </div>
-      </div>`}
-
-      <!-- 3. TODAY'S AGENDA (namaz-aware) -->
-      <div class="card card-pad">
-        <div style=${{ fontWeight: 700, marginBottom: 12 }}>Повестка на сегодня</div>
-        ${rem.loading ? html`<${ui.Skeleton} h=${52} style=${{ marginBottom: 8 }}/>`
-          : rem.err ? html`<${ui.BlockError} message="Не удалось загрузить задачи" onRetry=${rem.reload}/>`
-          : (function () {
-            var agenda = (rem.data || []).filter(function (r) { return isToday(r.scheduled_at); });
-            if (agenda.length === 0) return html`<div style=${{ fontSize: 13.5, color: 'var(--fg-subtle)' }}>На сегодня задач нет.</div>`;
-            return html`<div>${agenda.map(function (r) {
-              return html`<div key=${r.id} class="timeline-row">
-                <span style=${{ width: 38, height: 38, borderRadius: 11, background: 'var(--grad-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <${Icon} name=${r.type === 'delivery' ? 'truck' : r.type === 'call' ? 'phone' : 'coins'} size=${18}/></span>
-                <div style=${{ flex: 1, minWidth: 0 }}>
-                  <div style=${{ fontWeight: 600 }}>${ui.labels.reminderType[r.type] || r.type}${r.note ? html`<span style=${{ color: 'var(--fg-subtle)', fontWeight: 400 }}> · ${r.note}</span>` : null}</div>
-                  ${r.was_shifted ? html`<div style=${{ fontSize: 12.5, color: 'var(--st-part-fg)' }}>перенесено из-за намаза — ${r.reason}</div>` : null}
+        : html`<div class="dash-stack">
+            <section class="dash-panel dash-panel-week dash-panel-week-large">
+              <div class="dash-section-head">
+                <div>
+                  <div class="dash-section-kicker dash-section-kicker-strong">Неделя к получению</div>
+                  <h3>Платежи на этой неделе</h3>
                 </div>
-                <div class="amana-num" style=${{ fontWeight: 600, color: 'var(--fg-muted)' }}>${fmt.time(r.scheduled_at)}</div>
-                ${r.was_shifted ? html`<span class="chip chip-partially_paid">перенесено</span>` : null}
-              </div>`;
-            })}</div>`;
-          })()}
-      </div>
+                <div class="dash-week-inline-rate amana-num">${rate}% собрано</div>
+              </div>
+              <div class="dash-week-layout">
+                <div class="dash-week-summary">
+                  <div class="dash-meter-block">
+                    <div class="dash-meter-top">
+                      <div>
+                        <div class="dash-meter-label">Получено</div>
+                        <div class="dash-meter-value dash-meter-value-strong amana-num">${fmt.money(d.week.collected)}</div>
+                      </div>
+                      <div class="dash-meter-side dash-meter-side-expected">
+                        <span>К получению</span>
+                        <strong class="amana-num">${fmt.money(d.week.expected)}</strong>
+                      </div>
+                    </div>
+                    <div class="progress dash-progress"><i style=${{ width: rate + '%' }}></i></div>
+                  </div>
+                  <div class="dash-overdue-mini">
+                    <div class="dash-overdue-mini-head">
+                      <div class="dash-ops-label">Просроченные платежи</div>
+                      <div class="dash-mini-note">${Math.min(d.overdue.length, 2)} из ${d.overdue.length}</div>
+                    </div>
+                    ${d.overdue.length === 0
+                      ? html`<div class="dash-empty-note">Просроченных платежей нет.</div>`
+                      : html`<div class="dash-overdue-mini-list">${d.overdue.slice(0, 2).map(function (o) {
+                          return html`<button key=${o.contract_id} class="dash-overdue-mini-row" onClick=${function () { ctx.go('contract', o.contract_id); }}>
+                            <div class="dash-overdue-mini-main">
+                              <div class="dash-overdue-mini-name">${o.client_name || 'Клиент'}</div>
+                              <div class="dash-overdue-mini-meta">${o.days_overdue} ${plural(o.days_overdue, 'день', 'дня', 'дней')} просрочки</div>
+                            </div>
+                            <div class="dash-overdue-mini-amount amana-num">${fmt.money(o.outstanding)}</div>
+                            <div class="dash-overdue-mini-arrow"><${Icon} name="arrow" size=${15}/></div>
+                          </button>`;
+                        })}</div>`}
+                  </div>
+                </div>
+                <div class="dash-week-list dash-week-list-box">
+                  <div class="dash-week-list-head">
+                    <div class="dash-week-list-title">Ближайшие платежи недели</div>
+                    <div class="dash-week-count amana-num">${d.week.upcoming.length}</div>
+                  </div>
+                  ${d.week.upcoming.length === 0
+                    ? html`<div class="dash-empty-note">На этой неделе новых платежей по графику нет.</div>`
+                    : html`<div class="dash-ledger">${d.week.upcoming.map(function (u) {
+                        return html`<button key=${u.contract_id + u.due_date} class="dash-ledger-row" onClick=${function () { ctx.go('contract', u.contract_id); }}>
+                          <div class="dash-ledger-date">
+                            <span class="dash-ledger-day">Срок: ${fmt.date(u.due_date)}</span>
+                            <span class="dash-ledger-client">${u.client_name || 'Клиент'}</span>
+                          </div>
+                          <div class="dash-ledger-amount amana-num">${fmt.money(u.amount)}</div>
+                          <${ui.StatusChip} map="installmentStatus" value=${u.status}/>
+                        </button>`;
+                      })}</div>`}
+                </div>
+              </div>
+              ${d.overdue.length > 0 ? html`<button class="dash-week-alert" onClick=${function () { ctx.go('schedule'); }}>
+                <span><${Icon} name="clock" size=${16}/> Есть просроченные платежи</span>
+                <span class="dash-week-alert-link">Открыть календарь</span>
+              </button>` : null}
+            </section>
+
+            <div class="dash-grid-lower">
+              <section class="dash-panel dash-panel-agenda">
+                <div class="dash-section-head">
+                  <div>
+                    <div class="dash-section-kicker">Повестка на сегодня</div>
+                    <h3>События на сегодня</h3>
+                  </div>
+                  <div class="dash-agenda-count amana-num">${rem.loading ? '…' : agenda.length}</div>
+                </div>
+                ${rem.loading ? html`<${ui.Skeleton} h=${54} style=${{ marginBottom: 8 }}/><${ui.Skeleton} h=${54}/>`
+                  : rem.err ? html`<${ui.BlockError} message="Не удалось загрузить задачи" onRetry=${rem.reload}/>`
+                  : agenda.length === 0 ? html`<div class="dash-empty-note">На сегодня задач нет.</div>`
+                  : html`<div class="dash-agenda-list">${agenda.map(function (r) {
+                      var busy = agendaBusy[r.id] || '';
+                      return html`<button key=${r.id} class="dash-agenda-row dash-agenda-row-link" onClick=${function () { ctx.go('reminder', r.id); }}>
+                        <div class="dash-agenda-time amana-num">${fmt.time(r.scheduled_at)}</div>
+                        <div class="dash-agenda-track"><span></span></div>
+                        <div class="dash-agenda-body">
+                          <div class="dash-agenda-topline">
+                            <div class="dash-agenda-title">
+                              <span class="dash-agenda-icon"><${Icon} name=${r.type === 'delivery' ? 'truck' : r.type === 'call' ? 'phone' : 'coins'} size=${16}/></span>
+                              <span>${ui.labels.reminderType[r.type] || r.type}</span>
+                            </div>
+                            <${ReminderQuickActions} reminder=${r} busy=${busy} variant="dashboard"
+                              onComplete=${function (item) { quickReminderAction(item, 'complete'); }}
+                              onCancel=${function (item) { quickReminderAction(item, 'cancel'); }}/>
+                          </div>
+                          ${r.note ? html`<div class="dash-agenda-note">${r.note}</div>` : null}
+                          ${r.was_shifted ? html`<div class="dash-agenda-shift">Перенесено из-за намаза: ${r.reason}</div>` : null}
+                        </div>
+                      </button>`;
+                    })}</div>`}
+              </section>
+
+              <section class="dash-panel dash-panel-ops">
+                <div class="dash-section-head">
+                  <div>
+                    <div class="dash-section-kicker dash-section-kicker-strong">Активный портфель</div>
+                    <h3>Всего к получению</h3>
+                  </div>
+                </div>
+                <div class="dash-portfolio-band">
+                  <div class="dash-portfolio-value amana-num">${fmt.money(d.portfolio.outstanding)}</div>
+                  <div class="dash-portfolio-contracts amana-num">${d.portfolio.active_contracts}</div>
+                  <div class="dash-portfolio-contracts-note">${plural(d.portfolio.active_contracts, 'активный договор', 'активных договора', 'активных договоров')}</div>
+                </div>
+                <div class="dash-portfolio-meta">
+                  <div class="dash-portfolio-meta-label">Собрано садака</div>
+                  <div class="dash-portfolio-meta-value amana-num">${charity.loading ? '…' : charityTotal}</div>
+                </div>
+                <div class="dash-ops-title">Быстрые действия</div>
+                <div class="dash-ops-actions dash-ops-actions-grid">
+                  <button class="btn btn-primary dash-action-btn" onClick=${function () { ctx.go('contract-new'); }}><${Icon} name="plus" size=${17}/> <span>Создать договор</span></button>
+                  <button class="btn btn-ghost dash-action-btn" onClick=${function () { setClientOpen(true); }}><${Icon} name="clients" size=${17}/> <span>Добавить клиента</span></button>
+                  <button class="btn btn-ghost dash-action-btn" onClick=${function () { setQuickPay(true); }}><${Icon} name="coins" size=${17}/> <span>Внести платёж</span></button>
+                </div>
+              </section>
+            </div>
+          </div>`}
 
       ${quickPay ? html`<${QuickPay} ctx=${ctx} onClose=${function () { setQuickPay(false); }} onDone=${function () { setQuickPay(false); dash.reload(); ctx.toast('Платёж принят'); }}/>` : null}
       ${clientOpen ? html`<${ClientModal} ctx=${ctx} onClose=${function () { setClientOpen(false); }} onSaved=${function () { setClientOpen(false); ctx.toast('Клиент добавлен'); }}/>` : null}
     </div>`;
   }
 
+  function agendaForToday(list) {
+    return (list || []).filter(function (r) { return isToday(r.scheduled_at) && r.base_status === 'scheduled'; });
+  }
   function weekRate(d) {
     var r = parseFloat((d && d.week && d.week.collection_rate_percent) || '0') || 0;
     return Math.max(0, Math.min(100, Math.round(r)));
@@ -200,6 +282,7 @@
   /* ================= CLIENTS ================= */
   function Clients(ctx) {
     var st = useAsync(api.listClients);
+    var contracts = useAsync(api.listContracts);
     var q = useState(''), query = q[0], setQuery = q[1];
     var m = useState(false), open = m[0], setOpen = m[1];
     var list = (st.data || []).filter(function (c) { return c.full_name.toLowerCase().indexOf(query.toLowerCase()) >= 0; });
@@ -208,14 +291,39 @@
         actions=${html`<button class="btn btn-primary" onClick=${function () { setOpen(true); }}><${Icon} name="plus" size=${17}/> Новый клиент</button>`}/>
       <div class="search" style=${{ marginBottom: 16 }}><${Icon} name="search" size=${17} style=${{ color: 'var(--fg-subtle)' }}/>
         <input placeholder="Поиск по имени…" value=${query} onInput=${function (e) { setQuery(e.target.value); }}/></div>
-      <${Guard} loading=${st.loading} err=${st.err}>
+      <${Guard} loading=${st.loading || contracts.loading} err=${st.err || contracts.err}>
         ${list.length === 0 ? html`<div class="card"><${ui.Empty} icon="clients" title="Клиентов нет"/></div>`
-          : html`<div class="card" style=${{ overflow: 'hidden' }}><table class="table"><thead><tr><th>Имя</th><th>Телефон</th><th>Документ</th></tr></thead>
-            <tbody>${list.map(function (c) {
-              return html`<tr key=${c.id}>
-                <td style=${{ fontWeight: 600 }}>${c.full_name}</td>
-                <td class="amana-num" style=${{ color: 'var(--fg-muted)' }}>${c.phone || '—'}</td>
-                <td style=${{ color: 'var(--fg-muted)' }}>${c.document || '—'}</td></tr>`;
+          : html`<div class="table-card clients-table-card"><table class="data-table clients-data-table"><thead><tr>
+              <th>Клиент</th><th>Контакты</th><th>Договоры</th><th>Остаток</th><th></th>
+            </tr></thead><tbody>${list.map(function (c) {
+              var rel = (contracts.data || []).filter(function (x) { return x.client_id === c.id; });
+              var activeCount = rel.filter(function (x) { return x.status === 'active'; }).length;
+              var outstanding = rel.reduce(function (sum, x) { return sum + parseFloat(x.outstanding || '0'); }, 0);
+              return html`<tr key=${c.id} class="data-row clients-data-row row-link" onClick=${function () { ctx.go('client', c.id); }}>
+                <td>
+                  <div class="table-primary">
+                    <span class="table-avatar">${initials(c.full_name)}</span>
+                    <div>
+                      <div class="table-title">${c.full_name}</div>
+                      <div class="table-subline">Добавлен ${fmt.date(c.created_at)}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div class="table-stack">
+                    <div class="table-kv"><span>Телефон</span><strong class="amana-num">${c.phone || 'Не указан'}</strong></div>
+                    <div class="table-kv"><span>Документ</span><strong>${c.document || 'Не указан'}</strong></div>
+                  </div>
+                </td>
+                <td>
+                  <div class="table-metric-pack">
+                    <span class="compact-chip compact-chip-strong amana-num">${rel.length}</span>
+                    <span class="compact-chip">${activeCount} активных</span>
+                  </div>
+                </td>
+                <td><strong class="table-money amana-num">${fmt.money(outstanding)}</strong></td>
+                <td class="table-arrow"><${Icon} name="arrow" size=${16}/></td>
+              </tr>`;
             })}</tbody></table></div>`}
       <//>
       ${open ? html`<${ClientModal} onClose=${function () { setOpen(false); }} onSaved=${function () { setOpen(false); st.reload(); ctx.toast('Клиент добавлен'); }} ctx=${ctx}/>` : null}
@@ -242,20 +350,49 @@
   /* ================= CATALOG ================= */
   function Catalog(ctx) {
     var st = useAsync(api.listProducts);
+    var contracts = useAsync(api.listContracts);
     var m = useState(false), open = m[0], setOpen = m[1];
     var list = st.data || [];
     return html`<div>
       <${PageHead} title="Каталог" sub=${list.length + ' товаров'}
         actions=${html`<button class="btn btn-primary" onClick=${function () { setOpen(true); }}><${Icon} name="plus" size=${17}/> Новый товар</button>`}/>
-      <${Guard} loading=${st.loading} err=${st.err}>
+      <${Guard} loading=${st.loading || contracts.loading} err=${st.err || contracts.err}>
         ${list.length === 0 ? html`<div class="card"><${ui.Empty} icon="catalog" title="Каталог пуст"/></div>`
-          : html`<div class="card" style=${{ overflow: 'hidden' }}><table class="table"><thead><tr><th>Название</th><th>Категория</th><th>Закупка</th><th>Статус</th></tr></thead>
-            <tbody>${list.map(function (pr) {
-              return html`<tr key=${pr.id}>
-                <td style=${{ fontWeight: 600 }}>${pr.name}</td>
-                <td style=${{ color: 'var(--fg-muted)' }}>${pr.category || '—'}</td>
-                <td class="amana-num" style=${{ fontWeight: 600 }}>${fmt.money(pr.cost_price)}</td>
-                <td><${ui.StatusChip} map="halal" value=${pr.halal_status}/></td></tr>`;
+          : html`<div class="table-card"><table class="data-table"><thead><tr>
+              <th>Товар</th><th>Категория и статус</th><th>Закупка</th><th>Договоры</th><th>Выдано</th><th></th>
+            </tr></thead><tbody>${list.map(function (pr) {
+              var rel = (contracts.data || []).filter(function (x) { return x.product_id === pr.id; });
+              var activeCount = rel.filter(function (x) { return x.status === 'active'; }).length;
+              var financed = rel.reduce(function (sum, x) { return sum + parseFloat(x.financed_amount || '0'); }, 0);
+              return html`<tr key=${pr.id} class="data-row row-link" onClick=${function () { ctx.go('product', pr.id); }}>
+                <td>
+                  <div class="table-primary">
+                    <span class="table-avatar table-avatar-icon"><${Icon} name="package" size=${16}/></span>
+                    <div>
+                      <div class="table-title">${pr.name}</div>
+                      <div class="table-subline">${pr.can_be_financed ? 'Доступен для рассрочки' : 'Недоступен для рассрочки'}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div class="table-stack">
+                    <div class="table-kv"><span>Категория</span><strong>${pr.category || 'Не указана'}</strong></div>
+                    <div class="compact-chip-group">
+                      <${ui.StatusChip} map="halal" value=${pr.halal_status}/>
+                      <span class=${'compact-chip ' + (pr.can_be_financed ? 'compact-chip-ok' : 'compact-chip-muted')}>${pr.can_be_financed ? 'Можно' : 'Нельзя'}</span>
+                    </div>
+                  </div>
+                </td>
+                <td><strong class="table-money amana-num">${fmt.money(pr.cost_price)}</strong></td>
+                <td>
+                  <div class="table-metric-pack">
+                    <span class="compact-chip compact-chip-strong amana-num">${rel.length}</span>
+                    <span class="compact-chip">${activeCount} активных</span>
+                  </div>
+                </td>
+                <td><strong class="table-money amana-num">${fmt.money(financed)}</strong></td>
+                <td class="table-arrow"><${Icon} name="arrow" size=${16}/></td>
+              </tr>`;
             })}</tbody></table></div>`}
       <//>
       ${open ? html`<${ProductModal} onClose=${function () { setOpen(false); }} onSaved=${function () { setOpen(false); st.reload(); ctx.toast('Товар добавлен'); }} ctx=${ctx}/>` : null}
@@ -286,6 +423,8 @@
   /* ================= CONTRACTS LIST ================= */
   function Contracts(ctx) {
     var st = useAsync(api.listContracts);
+    var clients = useAsync(api.listClients);
+    var products = useAsync(api.listProducts);
     var fl = useState('all'), filter = fl[0], setFilter = fl[1];
     var list = (st.data || []).filter(function (c) { return filter === 'all' || c.status === filter; });
     var tabs = [['all', 'Все'], ['active', 'Активные'], ['completed', 'Завершённые'], ['cancelled', 'Отменённые']];
@@ -295,21 +434,242 @@
       <div class="tabs" style=${{ marginBottom: 16, maxWidth: 460 }}>
         ${tabs.map(function (t) { return html`<button key=${t[0]} class=${'tab ' + (filter === t[0] ? 'active' : '')} onClick=${function () { setFilter(t[0]); }}>${t[1]}</button>`; })}
       </div>
-      <${Guard} loading=${st.loading} err=${st.err}>
+      <${Guard} loading=${st.loading || clients.loading || products.loading} err=${st.err || clients.err || products.err}>
         ${list.length === 0 ? html`<div class="card"><${ui.Empty} icon="contracts" title="Договоров нет" text="Оформите первый договор рассрочки"
             action=${html`<button class="btn btn-primary" style=${{ marginTop: 14 }} onClick=${function () { ctx.go('contract-new'); }}>Новый договор</button>`}/></div>`
-          : html`<div class="card" style=${{ overflow: 'hidden' }}><table class="table"><thead><tr><th>Цена продажи</th><th>Остаток</th><th>Прогресс</th><th>Статус</th></tr></thead>
-            <tbody>${list.map(function (c) {
-              return html`<tr key=${c.id} class="row-link" onClick=${function () { ctx.go('contract', c.id); }}>
-                <td class="amana-num" style=${{ fontWeight: 600 }}>${fmt.money(c.sale_price)}</td>
-                <td class="amana-num" style=${{ color: 'var(--fg-muted)' }}>${fmt.money(c.outstanding)}</td>
-                <td style=${{ width: 170 }}><div style=${{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <div class="progress"><i style=${{ width: (c.progress_percent || 0) + '%' }}></i></div>
-                  <span class="amana-num" style=${{ fontSize: 12.5, color: 'var(--fg-subtle)' }}>${Math.round(c.progress_percent || 0)}%</span></div></td>
-                <td style=${{ width: 120 }}><${ui.StatusChip} map="contractStatus" value=${c.status}/></td></tr>`;
-            })}</tbody></table></div>`}
+          : html`<div class="entity-list">${list.map(function (c) {
+              var client = findByID(clients.data, c.client_id);
+              var product = findByID(products.data, c.product_id);
+              var progress = Math.round(parseFloat(c.progress_percent || '0'));
+              return html`<button key=${c.id} class="entity-card entity-card-contract row-link" onClick=${function () { ctx.go('contract', c.id); }}>
+                <div class="entity-card-main">
+                  <div class="entity-contract-side">
+                    <div class="entity-contract-id">${c.id.slice(0, 8)}</div>
+                    <div class="entity-subline">Создан ${fmt.date(c.created_at)}</div>
+                  </div>
+                  <div class="entity-copy">
+                    <div class="entity-headline">
+                      <div>
+                        <div class="entity-title">${client ? client.full_name : 'Клиент не найден'}</div>
+                        <div class="entity-subline">${product ? product.name : 'Товар не найден'}</div>
+                      </div>
+                      <div class="entity-badges">
+                        <${ui.StatusChip} map="contractStatus" value=${c.status}/>
+                      </div>
+                    </div>
+                    <div class="entity-contract-grid">
+                      <div class="entity-stat">
+                        <span class="entity-stat-label">Цена продажи</span>
+                        <strong class="amana-num">${fmt.money(c.sale_price)}</strong>
+                      </div>
+                      <div class="entity-stat">
+                        <span class="entity-stat-label">К выдаче</span>
+                        <strong class="amana-num">${fmt.money(c.financed_amount)}</strong>
+                      </div>
+                      <div class="entity-stat entity-stat-strong">
+                        <span class="entity-stat-label">Остаток</span>
+                        <strong class="amana-num">${fmt.money(c.outstanding)}</strong>
+                      </div>
+                    </div>
+                    <div class="entity-progress-row">
+                      <div class="progress entity-progress"><i style=${{ width: progress + '%' }}></i></div>
+                      <span class="entity-progress-label amana-num">${progress}% оплачено</span>
+                      <span class="entity-open-link">Открыть договор <${Icon} name="arrow" size=${15}/></span>
+                    </div>
+                  </div>
+                </div>
+              </button>`;
+            })}</div>`}
       <//>
     </div>`;
+  }
+
+  function ClientCard(ctx) {
+    var st = useAsync(function () { return api.getClient(ctx.route.id); }, [ctx.route.id]);
+    var contracts = useAsync(api.listContracts);
+    return html`<div>
+      <div style=${{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+        <button class="icon-btn" onClick=${function () { ctx.go('clients'); }}><${Icon} name="back" size=${20}/></button>
+        <div class="page-title" style=${{ fontSize: 22 }}>Клиент</div>
+      </div>
+      <${Guard} loading=${st.loading || contracts.loading} err=${st.err || contracts.err}>
+        ${(function () {
+          var c = st.data;
+          if (!c) return null;
+          var rel = (contracts.data || []).filter(function (x) { return x.client_id === c.id; });
+          var active = rel.filter(function (x) { return x.status === 'active'; }).length;
+          var outstanding = rel.reduce(function (sum, x) { return sum + parseFloat(x.outstanding || '0'); }, 0);
+          return html`<div class="grid" style=${{ gap: 16 }}>
+            <div class="card card-pad">
+              <div class="table-primary">
+                <span class="table-avatar">${initials(c.full_name)}</span>
+                <div>
+                  <div class="page-title" style=${{ fontSize: 24 }}>${c.full_name}</div>
+                  <div class="page-sub">Клиент добавлен ${fmt.date(c.created_at)}</div>
+                </div>
+              </div>
+              <div class="compact-fields compact-fields-2" style=${{ marginTop: 18 }}>
+                <div class="compact-field"><span>Телефон</span><strong class="amana-num">${c.phone || 'Не указан'}</strong></div>
+                <div class="compact-field"><span>Документ</span><strong>${c.document || 'Не указан'}</strong></div>
+                <div class="compact-field"><span>Договоров</span><strong class="amana-num">${rel.length}</strong></div>
+                <div class="compact-field"><span>Активных</span><strong class="amana-num">${active}</strong></div>
+              </div>
+              <div class="banner banner-accent" style=${{ marginTop: 14 }}>
+                <${Icon} name="coins" size=${17}/> Остаток по всем договорам: <b class="amana-num">${fmt.money(outstanding)}</b>
+              </div>
+            </div>
+            <div class="table-card">
+              <div class="table-card-head">Договоры клиента</div>
+              ${rel.length === 0 ? html`<div class="card"><${ui.Empty} icon="contracts" title="Договоров пока нет"/></div>`
+                : html`<table class="data-table"><thead><tr><th>Договор</th><th>Статус</th><th>Цена</th><th>Остаток</th></tr></thead>
+                    <tbody>${rel.map(function (x) {
+                      return html`<tr key=${x.id} class="data-row row-link" onClick=${function () { ctx.go('contract', x.id); }}>
+                        <td><strong class="table-code">${x.id.slice(0, 8)}</strong></td>
+                        <td><${ui.StatusChip} map="contractStatus" value=${x.status}/></td>
+                        <td class="table-money amana-num">${fmt.money(x.sale_price)}</td>
+                        <td class="table-money amana-num">${fmt.money(x.outstanding)}</td>
+                      </tr>`;
+                    })}</tbody></table>`}
+            </div>
+          </div>`;
+        })()}
+      <//>
+    </div>`;
+  }
+
+  function ProductCard(ctx) {
+    var st = useAsync(function () { return api.getProduct(ctx.route.id); }, [ctx.route.id]);
+    var contracts = useAsync(api.listContracts);
+    return html`<div>
+      <div style=${{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+        <button class="icon-btn" onClick=${function () { ctx.go('catalog'); }}><${Icon} name="back" size=${20}/></button>
+        <div class="page-title" style=${{ fontSize: 22 }}>Товар</div>
+      </div>
+      <${Guard} loading=${st.loading || contracts.loading} err=${st.err || contracts.err}>
+        ${(function () {
+          var pr = st.data;
+          if (!pr) return null;
+          var rel = (contracts.data || []).filter(function (x) { return x.product_id === pr.id; });
+          var active = rel.filter(function (x) { return x.status === 'active'; }).length;
+          var financed = rel.reduce(function (sum, x) { return sum + parseFloat(x.financed_amount || '0'); }, 0);
+          return html`<div class="grid" style=${{ gap: 16 }}>
+            <div class="card card-pad">
+              <div class="table-primary">
+                <span class="table-avatar table-avatar-icon"><${Icon} name="package" size=${18}/></span>
+                <div>
+                  <div class="page-title" style=${{ fontSize: 24 }}>${pr.name}</div>
+                  <div class="page-sub">${pr.category || 'Категория не указана'}</div>
+                </div>
+              </div>
+              <div class="compact-chip-group" style=${{ marginTop: 14 }}>
+                <${ui.StatusChip} map="halal" value=${pr.halal_status}/>
+                <span class=${'compact-chip ' + (pr.can_be_financed ? 'compact-chip-ok' : 'compact-chip-muted')}>${pr.can_be_financed ? 'Можно оформить в рассрочку' : 'Нельзя оформить в рассрочку'}</span>
+              </div>
+              <div class="compact-fields compact-fields-2" style=${{ marginTop: 18 }}>
+                <div class="compact-field"><span>Закупочная цена</span><strong class="amana-num">${fmt.money(pr.cost_price)}</strong></div>
+                <div class="compact-field"><span>Всего договоров</span><strong class="amana-num">${rel.length}</strong></div>
+                <div class="compact-field"><span>Активных договоров</span><strong class="amana-num">${active}</strong></div>
+                <div class="compact-field"><span>Выдано в рассрочку</span><strong class="amana-num">${fmt.money(financed)}</strong></div>
+              </div>
+            </div>
+            <div class="table-card">
+              <div class="table-card-head">Договоры по товару</div>
+              ${rel.length === 0 ? html`<div class="card"><${ui.Empty} icon="contracts" title="Договоров пока нет"/></div>`
+                : html`<table class="data-table"><thead><tr><th>Договор</th><th>Статус</th><th>Цена</th><th>Остаток</th></tr></thead>
+                    <tbody>${rel.map(function (x) {
+                      return html`<tr key=${x.id} class="data-row row-link" onClick=${function () { ctx.go('contract', x.id); }}>
+                        <td><strong class="table-code">${x.id.slice(0, 8)}</strong></td>
+                        <td><${ui.StatusChip} map="contractStatus" value=${x.status}/></td>
+                        <td class="table-money amana-num">${fmt.money(x.sale_price)}</td>
+                        <td class="table-money amana-num">${fmt.money(x.outstanding)}</td>
+                      </tr>`;
+                    })}</tbody></table>`}
+            </div>
+          </div>`;
+        })()}
+      <//>
+    </div>`;
+  }
+
+  function initials(name) {
+    return String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function (x) { return x[0]; }).join('').toUpperCase() || 'К';
+  }
+  function findByID(list, id) {
+    return (list || []).filter(function (x) { return x.id === id; })[0] || null;
+  }
+  function normalizeReminder(r) {
+    return Object.assign({}, r, { date: new Date(r.scheduled_at) });
+  }
+  function reminderStatusText(r) {
+    return ui.labels.reminderStatus[(r && r.status) || 'scheduled'] || (r && r.status) || 'Запланирована';
+  }
+  function canQuickActReminder(r) {
+    return !!r && r.base_status === 'scheduled';
+  }
+  function stopEvent(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  function ReminderQuickActions(p) {
+    var reminder = p.reminder;
+    if (!canQuickActReminder(reminder)) return null;
+    var busy = p.busy || '';
+    return html`<div class=${'reminder-quick-actions ' + (p.variant || '')}>
+      <button class="reminder-quick-btn done" disabled=${busy === 'complete'} title="Выполнить задачу"
+        onClick=${function (e) { stopEvent(e); p.onComplete && p.onComplete(reminder); }}>
+        <${Icon} name="check" size=${p.iconSize || 12}/>
+      </button>
+      <button class="reminder-quick-btn cancel" disabled=${busy === 'cancel'} title="Отменить задачу"
+        onClick=${function (e) { stopEvent(e); p.onCancel && p.onCancel(reminder); }}>
+        <${Icon} name="x" size=${p.iconSize || 12}/>
+      </button>
+    </div>`;
+  }
+  function startOfDay(d) {
+    var x = new Date(d); x.setHours(0, 0, 0, 0); return x;
+  }
+  function sameDay(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+  function addDays(d, n) {
+    var x = new Date(d); x.setDate(x.getDate() + n); return startOfDay(x);
+  }
+  function addMonths(d, n) {
+    var x = new Date(d); x.setMonth(x.getMonth() + n, 1); return startOfDay(x);
+  }
+  function startOfWeek(d) {
+    var x = startOfDay(d), day = x.getDay(), diff = day === 0 ? -6 : 1 - day;
+    return addDays(x, diff);
+  }
+  function isWithinWeek(d, ref) {
+    var start = startOfWeek(ref), end = addDays(start, 7);
+    return d >= start && d < end;
+  }
+  function buildWeekDays(ref) {
+    var start = startOfWeek(ref), days = [];
+    for (var i = 0; i < 7; i++) days.push(addDays(start, i));
+    return days;
+  }
+  function buildMonthGrid(ref) {
+    var monthStart = new Date(ref.getFullYear(), ref.getMonth(), 1);
+    var gridStart = startOfWeek(monthStart);
+    var days = [];
+    for (var i = 0; i < 42; i++) {
+      var day = addDays(gridStart, i);
+      days.push({ key: day.toISOString(), date: day, isCurrentMonth: day.getMonth() === ref.getMonth() });
+    }
+    return days;
+  }
+  function eventsForDay(list, day) {
+    return list.filter(function (r) { return sameDay(r.date, day); }).slice(0, 6);
+  }
+  function shortReminderLabel(type) {
+    if (type === 'delivery') return 'Доставка';
+    if (type === 'payment_followup') return 'Платеж';
+    return 'Звонок';
+  }
+  function reminderTone(type) {
+    return type === 'delivery' ? 'delivery' : type === 'payment_followup' ? 'payment_followup' : 'call';
   }
 
   /* ================= CONTRACT WIZARD ================= */
@@ -586,33 +946,219 @@
   /* ================= SCHEDULE ================= */
   function Schedule(ctx) {
     var st = useAsync(api.listReminders);
+    var vw = useState('week'), view = vw[0], setView = vw[1];
+    var pv = useState('week'), previousView = pv[0], setPreviousView = pv[1];
+    var ds = useState(startOfDay(new Date())), selectedDate = ds[0], setSelectedDate = ds[1];
     var m = useState(false), open = m[0], setOpen = m[1];
+    var rb = useState({}), reminderBusy = rb[0], setReminderBusy = rb[1];
     var list = st.data || [];
+    var normalized = list.map(normalizeReminder).sort(function (a, b) { return a.date - b.date; });
+    var monthDays = buildMonthGrid(selectedDate);
+    var weekDays = buildWeekDays(selectedDate);
+    var dayEvents = normalized.filter(function (r) { return sameDay(r.date, selectedDate); });
+    var weekEvents = normalized.filter(function (r) { return isWithinWeek(r.date, selectedDate); });
+    var monthEvents = normalized.filter(function (r) { return r.date.getMonth() === selectedDate.getMonth() && r.date.getFullYear() === selectedDate.getFullYear(); });
+
+    function shiftRange(dir) {
+      if (view === 'day') setSelectedDate(addDays(selectedDate, dir));
+      else if (view === 'week') setSelectedDate(addDays(selectedDate, dir * 7));
+      else setSelectedDate(addMonths(selectedDate, dir));
+    }
+    function openDayFrom(fromView, date) {
+      setPreviousView(fromView);
+      setSelectedDate(date);
+      setView('day');
+    }
+    function switchView(nextView) {
+      if (nextView !== 'day') setPreviousView(nextView);
+      setView(nextView);
+    }
+    function quickReminderAction(reminder, action) {
+      setReminderBusy(function (prev) {
+        var next = Object.assign({}, prev);
+        next[reminder.id] = action;
+        return next;
+      });
+      var req = action === 'complete' ? api.completeReminder(reminder.id) : api.cancelReminder(reminder.id);
+      req.then(function () {
+        setReminderBusy(function (prev) {
+          var next = Object.assign({}, prev);
+          delete next[reminder.id];
+          return next;
+        });
+        st.reload();
+        ctx.toast(action === 'complete' ? 'Задача выполнена' : 'Задача отменена');
+      }).catch(function (e) {
+        setReminderBusy(function (prev) {
+          var next = Object.assign({}, prev);
+          delete next[reminder.id];
+          return next;
+        });
+        ctx.toast(e.message, true);
+      });
+    }
+
+    function titleByView() {
+      if (view === 'day') return selectedDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+      if (view === 'week') {
+        var start = startOfWeek(selectedDate), end = addDays(start, 6);
+        return start.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) + ' - ' +
+          end.toLocaleDateString('ru-RU', { day: 'numeric', month: end.getMonth() === start.getMonth() ? undefined : 'long', year: 'numeric' });
+      }
+      return selectedDate.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+    }
+
     return html`<div>
       <${PageHead} title="Календарь" sub="Задачи мимо времён намаза"
         actions=${html`<button class="btn btn-primary" onClick=${function () { setOpen(true); }}><${Icon} name="plus" size=${17}/> Новая задача</button>`}/>
       <${Guard} loading=${st.loading} err=${st.err}>
         ${list.length === 0 ? html`<div class="card"><${ui.Empty} icon="calendar" title="Задач пока нет" text="Создайте звонок или доставку — система обойдёт окна намаза"/></div>`
-          : html`<div class="grid" style=${{ gap: 12 }}>${list.map(function (r) {
-            return html`<div key=${r.id} class="card card-pad" style=${{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <span style=${{ width: 42, height: 42, borderRadius: 12, background: 'var(--grad-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <${Icon} name=${r.type === 'delivery' ? 'truck' : r.type === 'call' ? 'phone' : 'coins'} size=${20}/></span>
-              <div style=${{ flex: 1 }}>
-                <div style=${{ fontWeight: 600 }}>${ui.labels.reminderType[r.type] || r.type}${r.note ? html`<span style=${{ color: 'var(--fg-subtle)', fontWeight: 400 }}> · ${r.note}</span>` : null}</div>
-                <div style=${{ fontSize: 13, color: 'var(--fg-muted)' }}>${fmt.dateTime(r.scheduled_at)}</div>
+          : html`<div class="calendar-shell">
+              <section class="calendar-hero">
+                <div class="calendar-toolbar">
+                  <div>
+                    <div class="calendar-kicker">Планирование</div>
+                    <div class="calendar-range-title">${titleByView()}</div>
+                  </div>
+                  <div class="calendar-toolbar-actions">
+                    <div class="calendar-nav">
+                      <button class="icon-btn calendar-nav-btn" onClick=${function () { shiftRange(-1); }}><${Icon} name="back" size=${17}/></button>
+                      <button class="btn btn-ghost btn-sm" onClick=${function () { setSelectedDate(startOfDay(new Date())); }}>Сегодня</button>
+                      <button class="icon-btn calendar-nav-btn" onClick=${function () { shiftRange(1); }}><${Icon} name="arrow" size=${17}/></button>
+                    </div>
+                    <div class="calendar-view-switch">
+                      ${[['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']].map(function (v) {
+                        return html`<button key=${v[0]} class=${'calendar-view-btn ' + (view === v[0] ? 'active' : '')} onClick=${function () { switchView(v[0]); }}>${v[1]}</button>`;
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div class="calendar-summary-grid">
+                  <div class="calendar-summary-card">
+                    <span>На выбранный день</span>
+                    <strong class="amana-num">${dayEvents.length}</strong>
+                    <small>${plural(dayEvents.length, 'задача', 'задачи', 'задач')}</small>
+                  </div>
+                  <div class="calendar-summary-card">
+                    <span>На неделю</span>
+                    <strong class="amana-num">${weekEvents.length}</strong>
+                    <small>${plural(weekEvents.length, 'событие', 'события', 'событий')}</small>
+                  </div>
+                  <div class="calendar-summary-card">
+                    <span>На месяц</span>
+                    <strong class="amana-num">${monthEvents.length}</strong>
+                    <small>${plural(monthEvents.length, 'событие', 'события', 'событий')}</small>
+                  </div>
+                </div>
+              </section>
+              <div class="calendar-layout calendar-layout-full">
+                <section class="calendar-main">
+                  ${view === 'month' ? html`<div class="calendar-month">
+                      <div class="calendar-weekdays">${['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(function (label) {
+                        return html`<div key=${label} class="calendar-weekday">${label}</div>`;
+                      })}</div>
+                      <div class="calendar-month-grid">${monthDays.map(function (day) {
+                        var events = eventsForDay(normalized, day.date);
+                        var selected = sameDay(day.date, selectedDate);
+                        return html`<div key=${day.key} class=${'calendar-day-cell ' + (day.isCurrentMonth ? '' : 'muted ') + (selected ? 'selected' : '')} onClick=${function () { openDayFrom('month', day.date); }}>
+                          <div class="calendar-day-top">
+                            <span class="calendar-day-number">${day.date.getDate()}</span>
+                            ${events.length ? html`<span class="calendar-day-count amana-num">${events.length}</span>` : null}
+                          </div>
+                          <div class="calendar-day-events">
+                            ${events.slice(0, 3).map(function (r) { return html`<button key=${r.id} class=${'calendar-dot-note calendar-inline-link calendar-month-task ' + reminderTone(r.type)} onClick=${function (e) { e.stopPropagation(); ctx.go('reminder', r.id); }}>
+                              <span class="calendar-month-task-label">${fmt.time(r.scheduled_at)} ${shortReminderLabel(r.type)}</span>
+                              <${ReminderQuickActions} reminder=${r} busy=${reminderBusy[r.id] || ''} variant="month"
+                                onComplete=${function (item) { quickReminderAction(item, 'complete'); }}
+                                onCancel=${function (item) { quickReminderAction(item, 'cancel'); }}/>
+                            </button>`; })}
+                          </div>
+                        </div>`;
+                      })}</div>
+                    </div>`
+                    : view === 'week' ? html`<div class="calendar-week-board">
+                        ${weekDays.map(function (day) {
+                          var events = eventsForDay(normalized, day);
+                          return html`<div key=${day.toISOString()} class=${'calendar-week-column ' + (sameDay(day, selectedDate) ? 'selected' : '')} onClick=${function () { openDayFrom('week', day); }}>
+                            <div class="calendar-week-head">
+                              <div class="calendar-week-name">${day.toLocaleDateString('ru-RU', { weekday: 'short' })}</div>
+                              <div class="calendar-week-date amana-num">${day.getDate()}</div>
+                            </div>
+                            <div class="calendar-week-events">
+                              ${events.length === 0 ? html`<div class="calendar-empty-mini">Нет задач</div>` : events.map(function (r) {
+                                return html`<button key=${r.id} class=${'calendar-event-chip calendar-inline-link ' + reminderTone(r.type)} onClick=${function (e) { e.stopPropagation(); ctx.go('reminder', r.id); }}>
+                                  <div class="calendar-week-task-top">
+                                    <strong class="amana-num">${fmt.time(r.scheduled_at)}</strong>
+                                    <${ReminderQuickActions} reminder=${r} busy=${reminderBusy[r.id] || ''} variant="week"
+                                      onComplete=${function (item) { quickReminderAction(item, 'complete'); }}
+                                      onCancel=${function (item) { quickReminderAction(item, 'cancel'); }}/>
+                                  </div>
+                                  <span>${ui.labels.reminderType[r.type] || r.type}</span>
+                                </button>`;
+                              })}
+                            </div>
+                          </div>`;
+                        })}
+                      </div>`
+                    : html`<div class="calendar-day-board">
+                        <div class="calendar-day-board-head">
+                          <div>
+                            <div class="calendar-kicker">Выбранный день</div>
+                            <div class="calendar-day-board-title">${selectedDate.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                          </div>
+                          <div class="calendar-day-board-actions">
+                            <button class="btn btn-sm calendar-back-btn" onClick=${function () { setView(previousView || 'week'); }}><${Icon} name="back" size=${15}/> Назад к ${previousView === 'month' ? 'месяцу' : 'неделе'}</button>
+                            <div class="calendar-day-badge amana-num">${dayEvents.length}</div>
+                          </div>
+                        </div>
+                        <div class="calendar-day-events-list">
+                          ${dayEvents.length === 0 ? html`<div class="calendar-empty-state">На этот день задач нет.</div>` : dayEvents.map(function (r) {
+                            return html`<button key=${r.id} class="calendar-event-row calendar-inline-link" onClick=${function () { ctx.go('reminder', r.id); }}>
+                              <div class="calendar-event-time">
+                                <span class="amana-num">${fmt.time(r.scheduled_at)}</span>
+                                <small>${r.duration_minutes} мин</small>
+                              </div>
+                              <div class="calendar-event-body">
+                                <div class="calendar-event-headline">
+                                  <div class="calendar-event-title">
+                                    <span class=${'calendar-event-icon ' + reminderTone(r.type)}><${Icon} name=${r.type === 'delivery' ? 'truck' : r.type === 'call' ? 'phone' : 'coins'} size=${16}/></span>
+                                    <span>${ui.labels.reminderType[r.type] || r.type}</span>
+                                    ${r.was_shifted ? html`<span class="chip chip-partially_paid">Перенесено</span>` : html`<span class="chip chip-paid">По плану</span>`}
+                                  </div>
+                                  <${ReminderQuickActions} reminder=${r} busy=${reminderBusy[r.id] || ''} variant="day"
+                                    onComplete=${function (item) { quickReminderAction(item, 'complete'); }}
+                                    onCancel=${function (item) { quickReminderAction(item, 'cancel'); }}/>
+                                </div>
+                                ${r.note ? html`<div class="calendar-event-note">${r.note}</div>` : null}
+                                <div class="calendar-event-meta">
+                                  <span>Назначено на ${fmt.dateTime(r.scheduled_at)}</span>
+                                  ${r.was_shifted ? html`<span>${r.reason}</span>` : null}
+                                </div>
+                              </div>
+                            </button>`;
+                          })}
+                        </div>
+                      </div>`}
+                </section>
               </div>
-              ${r.was_shifted ? html`<div style=${{ textAlign: 'right' }}><span class="chip chip-partially_paid">Перенесено</span>
-                <div style=${{ fontSize: 11.5, color: 'var(--st-part-fg)', marginTop: 4, maxWidth: 240 }}>${r.reason}</div></div>`
-                : html`<span class="chip chip-paid">Вовремя</span>`}
-            </div>`;
-          })}</div>`}
+            </div>`}
       <//>
       ${open ? html`<${ReminderModal} ctx=${ctx} onClose=${function () { setOpen(false); }} onDone=${function () { setOpen(false); st.reload(); ctx.toast('Задача создана'); }}/>` : null}
     </div>`;
   }
   function ReminderModal(p) {
     var clients = useAsync(api.listClients);
-    var f = useState({ type: 'call', client_id: '', note: '', date: defaultStart(), time: '13:00', duration_minutes: 20 }), v = f[0], set = f[1];
+    var contracts = useAsync(api.listContracts);
+    var initial = p.initial || {};
+    var f = useState({
+      type: initial.type || 'call',
+      client_id: initial.client_id || '',
+      contract_id: initial.contract_id || '',
+      note: initial.note || '',
+      date: initial.scheduled_at ? initial.scheduled_at.slice(0, 10) : defaultStart(),
+      time: initial.scheduled_at ? new Date(initial.scheduled_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '13:00',
+      duration_minutes: initial.duration_minutes || 20,
+    }), v = f[0], set = f[1];
     var pv = useState(null), slot = pv[0], setSlot = pv[1];
     var b = useState(false), busy = b[0], setBusy = b[1];
     function iso() { return v.date + 'T' + v.time + ':00+03:00'; }
@@ -623,13 +1169,21 @@
       }, 200);
       return function () { alive = false; clearTimeout(t); };
     }, [v.date, v.time, v.duration_minutes]);
-    function create() {
+    function save() {
       setBusy(true);
-      api.createReminder({ type: v.type, client_id: v.client_id || undefined, note: v.note.trim(),
-        desired_at: iso(), duration_minutes: Number(v.duration_minutes) }).then(p.onDone).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
+      var body = {
+        type: v.type,
+        client_id: v.client_id || undefined,
+        contract_id: v.contract_id || undefined,
+        note: v.note.trim(),
+        desired_at: iso(),
+        duration_minutes: Number(v.duration_minutes)
+      };
+      var req = initial.id ? api.updateReminder(initial.id, body) : api.createReminder(body);
+      req.then(p.onDone).catch(function (e) { setBusy(false); p.ctx.toast(e.message, true); });
     }
     var upd = function (k) { return function (e) { var o = {}; o[k] = e.target.value; set(Object.assign({}, v, o)); }; };
-    return html`<${ui.Modal} title="Новая задача" onClose=${p.onClose} width=${460}>
+    return html`<${ui.Modal} title=${initial.id ? 'Редактировать задачу' : 'Новая задача'} onClose=${p.onClose} width=${460}>
       <${ui.Field} label="Тип">
         <select class="select" value=${v.type} onChange=${upd('type')}>
           <option value="call">Звонок</option><option value="delivery">Доставка</option><option value="payment_followup">Контакт по платежу</option></select>
@@ -638,6 +1192,11 @@
         <select class="select" value=${v.client_id} onChange=${upd('client_id')}>
           <option value="">— не выбран —</option>
           ${(clients.data || []).map(function (c) { return html`<option key=${c.id} value=${c.id}>${c.full_name}</option>`; })}</select>
+      <//>
+      <${ui.Field} label="Договор (необязательно)">
+        <select class="select" value=${v.contract_id} onChange=${upd('contract_id')}>
+          <option value="">— не выбран —</option>
+          ${(contracts.data || []).map(function (c) { return html`<option key=${c.id} value=${c.id}>${(c.client_name || c.id.slice(0, 8)) + ' · остаток ' + fmt.money(c.outstanding)}</option>`; })}</select>
       <//>
       <div style=${{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <${ui.Field} label="Дата"><input class="input" type="date" value=${v.date} onInput=${upd('date')}/><//>
@@ -648,8 +1207,112 @@
       ${slot ? (slot.was_shifted
         ? html`<div class="banner banner-warn" style=${{ fontSize: 13 }}><${Icon} name="moon2" size=${17}/><div>Будет перенесено на <b>${fmt.time(slot.scheduled_at)}</b> — ${slot.reason}</div></div>`
         : html`<div class="banner banner-accent" style=${{ fontSize: 13 }}><${Icon} name="check" size=${17}/> Время свободно — переноса не требуется.</div>`) : null}
-      <button class="btn btn-primary btn-block" disabled=${busy} onClick=${create}>${busy ? html`<${ui.Spinner}/>` : 'Создать задачу'}</button>
+      <button class="btn btn-primary btn-block" disabled=${busy || clients.loading || contracts.loading} onClick=${save}>${busy ? html`<${ui.Spinner}/>` : initial.id ? 'Сохранить изменения' : 'Создать задачу'}</button>
     <//>`;
+  }
+
+  function ReminderCard(ctx) {
+    var st = useAsync(function () { return api.getReminder(ctx.route.id); }, [ctx.route.id]);
+    var clients = useAsync(api.listClients);
+    var contracts = useAsync(api.listContracts);
+    var ed = useState(false), editOpen = ed[0], setEditOpen = ed[1];
+    var bz = useState(''), busy = bz[0], setBusy = bz[1];
+    function runAction(action, okText) {
+      if (!st.data) return;
+      setBusy(action);
+      (action === 'complete' ? api.completeReminder(st.data.id) : api.cancelReminder(st.data.id))
+        .then(function () { setBusy(''); st.reload(); ctx.toast(okText); })
+        .catch(function (e) { setBusy(''); ctx.toast(e.message, true); });
+    }
+    return html`<div>
+      <div style=${{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+        <button class="icon-btn" onClick=${function () { ctx.go('schedule'); }}><${Icon} name="back" size=${20}/></button>
+        <div class="page-title" style=${{ fontSize: 22 }}>Задача</div>
+      </div>
+      <${Guard} loading=${st.loading || clients.loading || contracts.loading} err=${st.err || clients.err || contracts.err}>
+        ${(function () {
+          var reminder = st.data;
+          if (!reminder) return html`<div class="card"><${ui.Empty} icon="calendar" title="Задача не найдена"/></div>`;
+          var client = findByID(clients.data, reminder.client_id);
+          var contract = findByID(contracts.data, reminder.contract_id);
+          var canMutate = reminder.base_status === 'scheduled';
+          return html`<div class="grid reminder-card-grid" style=${{ gap: 14 }}>
+            <div class="card card-pad reminder-card-compact">
+              <div style=${{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <div style=${{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                    <span class=${'calendar-event-icon ' + reminderTone(reminder.type)}><${Icon} name=${reminder.type === 'delivery' ? 'truck' : reminder.type === 'call' ? 'phone' : 'coins'} size=${16}/></span>
+                    <div class="reminder-card-title">${ui.labels.reminderType[reminder.type] || reminder.type}</div>
+                  </div>
+                  <div class="page-sub">Назначено на ${fmt.dateTime(reminder.scheduled_at)}</div>
+                </div>
+                <div style=${{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <${ui.StatusChip} map="reminderStatus" value=${reminder.status}/>
+                  ${reminder.was_shifted ? html`<span class="chip chip-partially_paid">Перенесено</span>` : html`<span class="chip chip-paid">По плану</span>`}
+                </div>
+              </div>
+              ${reminder.note ? html`<div class="banner banner-accent reminder-note-banner" style=${{ marginTop: 14 }}><${Icon} name="doc" size=${16}/> ${reminder.note}</div>` : null}
+              <div class="compact-fields compact-fields-2 reminder-compact-fields" style=${{ marginTop: 14 }}>
+                <div class="compact-field"><span>Дата и время</span><strong class="amana-num">${fmt.dateTime(reminder.scheduled_at)}</strong></div>
+                <div class="compact-field"><span>Статус</span><strong>${reminderStatusText(reminder)}</strong></div>
+                <div class="compact-field"><span>Длительность</span><strong class="amana-num">${reminder.duration_minutes} мин</strong></div>
+                <div class="compact-field"><span>Клиент</span><strong>${client ? client.full_name : reminder.client_id ? 'Привязан клиент' : 'Не указан'}</strong></div>
+                <div class="compact-field"><span>Договор</span><strong>${contract ? contract.id.slice(0, 8) : reminder.contract_id ? reminder.contract_id.slice(0, 8) : 'Не указан'}</strong></div>
+                <div class="compact-field"><span>Желаемое время</span><strong class="amana-num">${fmt.dateTime(reminder.desired_at)}</strong></div>
+              </div>
+              ${reminder.was_shifted ? html`<div class="banner banner-warn reminder-note-banner" style=${{ marginTop: 14 }}><${Icon} name="moon2" size=${16}/> ${reminder.reason}</div>` : null}
+              ${reminder.completed_at ? html`<div class="banner banner-accent reminder-note-banner" style=${{ marginTop: 14 }}><${Icon} name="check" size=${16}/> Выполнена ${fmt.dateTime(reminder.completed_at)}</div>` : null}
+              ${reminder.cancelled_at ? html`<div class="banner banner-warn reminder-note-banner" style=${{ marginTop: 14 }}><${Icon} name="x" size=${16}/> Отменена ${fmt.dateTime(reminder.cancelled_at)}</div>` : null}
+            </div>
+            <div class="reminder-actions-stack">
+              <section class="reminder-decision-panel">
+                <div class="reminder-decision-head">
+                  <div>
+                    <div class="reminder-decision-kicker">Главное действие</div>
+                  </div>
+                  ${canMutate ? html`<span class="chip chip-pending">Ожидает решения</span>` : html`<${ui.StatusChip} map="reminderStatus" value=${reminder.status}/>`}
+                </div>
+                ${canMutate
+                  ? html`<div class="reminder-decision-grid">
+                      <button class="reminder-decision-btn complete" disabled=${busy === 'complete'} onClick=${function () { runAction('complete', 'Задача отмечена выполненной'); }}>
+                        <span class="reminder-decision-icon"><${Icon} name="check" size=${18}/></span>
+                        <span class="reminder-decision-copy">
+                          <strong>${busy === 'complete' ? 'Сохраняем выполнение…' : 'Выполнить задачу'}</strong>
+                          <small>Закрыть задачу как сделанную и убрать её из активных.</small>
+                        </span>
+                      </button>
+                      <button class="reminder-decision-btn cancel" disabled=${busy === 'cancel'} onClick=${function () { runAction('cancel', 'Задача отменена'); }}>
+                        <span class="reminder-decision-icon"><${Icon} name="x" size=${18}/></span>
+                        <span class="reminder-decision-copy">
+                          <strong>${busy === 'cancel' ? 'Отменяем задачу…' : 'Отменить задачу'}</strong>
+                          <small>Закрыть задачу без выполнения, если она больше не нужна.</small>
+                        </span>
+                      </button>
+                    </div>`
+                  : html`<div class="reminder-decision-locked">
+                      <${Icon} name=${reminder.status === 'completed' ? 'check' : 'x'} size=${18}/>
+                      <div>
+                        <strong>${reminder.status === 'completed' ? 'Задача уже выполнена' : 'Задача уже отменена'}</strong>
+                        <span>${reminder.status === 'completed' ? 'Основное действие уже завершено.' : 'Повторное решение по задаче больше не требуется.'}</span>
+                      </div>
+                    </div>`}
+              </section>
+
+              <section class="table-card reminder-support-panel">
+                <div class="table-card-head">Дополнительные действия</div>
+                <div class="reminder-actions-wrap reminder-actions-wrap-secondary">
+                  ${canMutate ? html`<button class="btn btn-primary btn-sm" onClick=${function () { setEditOpen(true); }}><${Icon} name="edit" size=${15}/> Редактировать</button>` : null}
+                  ${client ? html`<button class="btn btn-ghost btn-sm" onClick=${function () { ctx.go('client', client.id); }}><${Icon} name="clients" size=${15}/> Открыть клиента</button>` : null}
+                  ${contract ? html`<button class="btn btn-ghost btn-sm" onClick=${function () { ctx.go('contract', contract.id); }}><${Icon} name="contracts" size=${15}/> Открыть договор</button>` : null}
+                  <button class="btn btn-ghost btn-sm" onClick=${function () { ctx.go('schedule'); }}><${Icon} name="calendar" size=${15}/> К календарю</button>
+                </div>
+              </section>
+            </div>
+          </div>`;
+        })()}
+      <//>
+      ${editOpen && st.data ? html`<${ReminderModal} ctx=${ctx} initial=${st.data} onDone=${function () { setEditOpen(false); st.reload(); ctx.toast('Задача обновлена'); }} onClose=${function () { setEditOpen(false); }}/>` : null}
+    </div>`;
   }
 
   /* ================= CHARITY ================= */
@@ -762,7 +1425,7 @@
     return d.toISOString().slice(0, 10);
   }
 
-  AM.screens = { dashboard: Dashboard, clients: Clients, catalog: Catalog, contracts: Contracts,
+  AM.screens = { dashboard: Dashboard, clients: Clients, client: ClientCard, catalog: Catalog, product: ProductCard, contracts: Contracts, reminder: ReminderCard,
     'contract-new': ContractWizard, contract: ContractCard, schedule: Schedule, charity: Charity,
     developers: Developers, settings: Settings };
 })();

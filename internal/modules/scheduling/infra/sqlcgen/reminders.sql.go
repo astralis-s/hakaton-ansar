@@ -14,13 +14,13 @@ import (
 const createReminder = `-- name: CreateReminder :one
 INSERT INTO reminders (
     id, org_id, type, client_id, contract_id, note,
-    desired_at, duration_minutes, scheduled_at, was_shifted, reason
+    desired_at, duration_minutes, scheduled_at, was_shifted, reason, status
 ) VALUES (
     $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10, $11
+    $7, $8, $9, $10, $11, $12
 )
 RETURNING id, org_id, type, client_id, contract_id, note,
-          desired_at, duration_minutes, scheduled_at, was_shifted, reason, created_at
+          desired_at, duration_minutes, scheduled_at, was_shifted, reason, status, completed_at, cancelled_at, created_at
 `
 
 type CreateReminderParams struct {
@@ -35,6 +35,7 @@ type CreateReminderParams struct {
 	ScheduledAt     pgtype.Timestamptz `json:"scheduled_at"`
 	WasShifted      bool               `json:"was_shifted"`
 	Reason          string             `json:"reason"`
+	Status          string             `json:"status"`
 }
 
 func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error) {
@@ -50,6 +51,7 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		arg.ScheduledAt,
 		arg.WasShifted,
 		arg.Reason,
+		arg.Status,
 	)
 	var i Reminder
 	err := row.Scan(
@@ -64,6 +66,39 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		&i.ScheduledAt,
 		&i.WasShifted,
 		&i.Reason,
+		&i.Status,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getReminderByID = `-- name: GetReminderByID :one
+SELECT id, org_id, type, client_id, contract_id, note,
+       desired_at, duration_minutes, scheduled_at, was_shifted, reason, status, completed_at, cancelled_at, created_at
+FROM reminders
+WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) GetReminderByID(ctx context.Context, orgID pgtype.UUID, id pgtype.UUID) (Reminder, error) {
+	row := q.db.QueryRow(ctx, getReminderByID, orgID, id)
+	var i Reminder
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.Type,
+		&i.ClientID,
+		&i.ContractID,
+		&i.Note,
+		&i.DesiredAt,
+		&i.DurationMinutes,
+		&i.ScheduledAt,
+		&i.WasShifted,
+		&i.Reason,
+		&i.Status,
+		&i.CompletedAt,
+		&i.CancelledAt,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -71,7 +106,7 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 
 const listRemindersByOrg = `-- name: ListRemindersByOrg :many
 SELECT id, org_id, type, client_id, contract_id, note,
-       desired_at, duration_minutes, scheduled_at, was_shifted, reason, created_at
+       desired_at, duration_minutes, scheduled_at, was_shifted, reason, status, completed_at, cancelled_at, created_at
 FROM reminders
 WHERE org_id = $1
 ORDER BY scheduled_at ASC
@@ -98,6 +133,9 @@ func (q *Queries) ListRemindersByOrg(ctx context.Context, orgID pgtype.UUID) ([]
 			&i.ScheduledAt,
 			&i.WasShifted,
 			&i.Reason,
+			&i.Status,
+			&i.CompletedAt,
+			&i.CancelledAt,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -108,4 +146,78 @@ func (q *Queries) ListRemindersByOrg(ctx context.Context, orgID pgtype.UUID) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateReminder = `-- name: UpdateReminder :one
+UPDATE reminders
+SET type = $3,
+    client_id = $4,
+    contract_id = $5,
+    note = $6,
+    desired_at = $7,
+    duration_minutes = $8,
+    scheduled_at = $9,
+    was_shifted = $10,
+    reason = $11,
+    status = $12,
+    completed_at = $13,
+    cancelled_at = $14
+WHERE org_id = $1 AND id = $2
+RETURNING id, org_id, type, client_id, contract_id, note,
+          desired_at, duration_minutes, scheduled_at, was_shifted, reason, status, completed_at, cancelled_at, created_at
+`
+
+type UpdateReminderParams struct {
+	OrgID           pgtype.UUID        `json:"org_id"`
+	ID              pgtype.UUID        `json:"id"`
+	Type            string             `json:"type"`
+	ClientID        pgtype.UUID        `json:"client_id"`
+	ContractID      pgtype.UUID        `json:"contract_id"`
+	Note            string             `json:"note"`
+	DesiredAt       pgtype.Timestamptz `json:"desired_at"`
+	DurationMinutes int32              `json:"duration_minutes"`
+	ScheduledAt     pgtype.Timestamptz `json:"scheduled_at"`
+	WasShifted      bool               `json:"was_shifted"`
+	Reason          string             `json:"reason"`
+	Status          string             `json:"status"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt     pgtype.Timestamptz `json:"cancelled_at"`
+}
+
+func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) (Reminder, error) {
+	row := q.db.QueryRow(ctx, updateReminder,
+		arg.OrgID,
+		arg.ID,
+		arg.Type,
+		arg.ClientID,
+		arg.ContractID,
+		arg.Note,
+		arg.DesiredAt,
+		arg.DurationMinutes,
+		arg.ScheduledAt,
+		arg.WasShifted,
+		arg.Reason,
+		arg.Status,
+		arg.CompletedAt,
+		arg.CancelledAt,
+	)
+	var i Reminder
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.Type,
+		&i.ClientID,
+		&i.ContractID,
+		&i.Note,
+		&i.DesiredAt,
+		&i.DurationMinutes,
+		&i.ScheduledAt,
+		&i.WasShifted,
+		&i.Reason,
+		&i.Status,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }

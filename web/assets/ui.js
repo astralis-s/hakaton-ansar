@@ -36,6 +36,8 @@
     copy: 'M9 9h10v10H9zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
     phone: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
     doc: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
+    edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
+    info: 'M12 8h.01M11 12h2v6h-2zM12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z',
     star: 'M12 2l3 6.5 7 .9-5 4.8 1.3 7-6.3-3.4L5.7 21 7 14.2 2 9.4l7-.9z',
     package: 'M16.5 9.4 7.5 4.2M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.3 7L12 12l8.7-5M12 22V12',
     truck: 'M1 3h15v13H1zM16 8h4l3 3v5h-7zM5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
@@ -69,6 +71,7 @@
   var labels = {
     contractStatus: { active: 'Активен', completed: 'Завершён', cancelled: 'Отменён', draft: 'Черновик' },
     installmentStatus: { paid: 'Оплачен', partially_paid: 'Частично', pending: 'Предстоит', overdue: 'Просрочен' },
+    reminderStatus: { scheduled: 'Запланирована', overdue: 'Просрочена', completed: 'Выполнена', cancelled: 'Отменена' },
     halal: { halal: 'Халяль', haram: 'Харам', doubtful: 'Сомнительно' },
     halalChip: { halal: 'chip-halal', haram: 'chip-haram', doubtful: 'chip-doubt' },
     reminderType: { call: 'Звонок', delivery: 'Доставка', payment_followup: 'Контакт по платежу' },
@@ -82,6 +85,7 @@
     var label = (labels[p.map] && labels[p.map][p.value]) || p.value;
     var cls = 'chip-' + p.value;
     if (p.map === 'halal') cls = labels.halalChip[p.value] || 'chip-info';
+    if (p.map === 'reminderStatus' && p.value === 'scheduled') cls = 'chip-pending';
     return html`<${Chip} cls=${cls} label=${label}/>`;
   }
 

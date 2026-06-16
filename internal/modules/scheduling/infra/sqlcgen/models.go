@@ -103,6 +103,9 @@ type Reminder struct {
 	ScheduledAt     pgtype.Timestamptz `json:"scheduled_at"`
 	WasShifted      bool               `json:"was_shifted"`
 	Reason          string             `json:"reason"`
+	Status          string             `json:"status"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt     pgtype.Timestamptz `json:"cancelled_at"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 

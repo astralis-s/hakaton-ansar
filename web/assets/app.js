@@ -47,18 +47,37 @@
     var isOwner = me ? me.role === 'owner' : false;
     var ctx = { route: route, go: go, toast: flash, confirm: setConfirm, isOwner: isOwner, me: me, theme: theme, toggleTheme: toggleTheme };
     var Screen = AM.screens[route.page] || AM.screens.dashboard;
-    var activePage = route.page === 'contract' || route.page === 'contract-new' ? 'contracts' : route.page;
+    var activePage = route.page === 'contract' || route.page === 'contract-new' ? 'contracts'
+      : route.page === 'client' ? 'clients'
+      : route.page === 'product' ? 'catalog'
+      : route.page === 'reminder' ? 'schedule'
+      : route.page;
 
     return html`<div class="shell">
       <aside class="sidebar">
-        <div class="brand"><span class="brand-badge"><${Icon} name="logo" size=${19} sw=${1.9}/></span><span class="brand-name">Амана</span></div>
-        ${NAV.map(function (n) {
-          if (n[3] && !isOwner) return null;
-          return html`<a key=${n[0]} class=${'nav-item ' + (activePage === n[0] ? 'active' : '')} href=${'#/' + n[0]}><${Icon} name=${n[2]} size=${18}/> ${n[1]}</a>`;
-        })}
-        <div style=${{ flex: 1 }}></div>
-        <div class="nav-sep"></div>
-        <a class="nav-item" onClick=${logout} style=${{ cursor: 'pointer' }}><${Icon} name="logout" size=${18}/> Выйти</a>
+        <div class="sidebar-panel">
+          <div class="brand">
+            <span class="brand-badge"><${Icon} name="logo" size=${19} sw=${1.9}/></span>
+            <div class="brand-copy">
+              <span class="brand-name">Амана</span>
+              <span class="brand-sub">CRM для рассрочек</span>
+            </div>
+          </div>
+          <div class="sidebar-nav">
+            ${NAV.map(function (n) {
+              if (n[3] && !isOwner) return null;
+              return html`<a key=${n[0]} class=${'nav-item ' + (activePage === n[0] ? 'active' : '')} href=${'#/' + n[0]}><${Icon} name=${n[2]} size=${18}/> <span>${n[1]}</span></a>`;
+            })}
+          </div>
+          <div class="sidebar-footer">
+            <div class="nav-sep"></div>
+            <div class="sidebar-meta">
+              <div class="sidebar-meta-title">${me ? me.full_name : 'Пользователь'}</div>
+              <div class="sidebar-meta-sub">${isOwner ? 'Владелец системы' : 'Менеджер системы'}</div>
+            </div>
+            <a class="nav-item nav-item-exit" onClick=${logout} style=${{ cursor: 'pointer' }}><${Icon} name="logout" size=${18}/> <span>Выйти</span></a>
+          </div>
+        </div>
       </aside>
       <div>
         <div class="topbar">

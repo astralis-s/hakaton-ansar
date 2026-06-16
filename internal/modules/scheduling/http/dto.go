@@ -15,24 +15,37 @@ type createReminderRequest struct {
 	DurationMinutes int    `json:"duration_minutes" validate:"min=0"`
 }
 
+type updateReminderRequest struct {
+	Type            string `json:"type" validate:"required,oneof=call delivery payment_followup"`
+	ClientID        string `json:"client_id" validate:"omitempty,uuid"`
+	ContractID      string `json:"contract_id" validate:"omitempty,uuid"`
+	Note            string `json:"note"`
+	DesiredAt       string `json:"desired_at" validate:"required"` // RFC3339
+	DurationMinutes int    `json:"duration_minutes" validate:"min=0"`
+}
+
 type previewSlotRequest struct {
 	DesiredAt       string `json:"desired_at" validate:"required"` // RFC3339
 	DurationMinutes int    `json:"duration_minutes" validate:"min=0"`
 }
 
 type reminderResponse struct {
-	ID              string    `json:"id"`
-	OrgID           string    `json:"org_id"`
-	Type            string    `json:"type"`
-	ClientID        string    `json:"client_id,omitempty"`
-	ContractID      string    `json:"contract_id,omitempty"`
-	Note            string    `json:"note"`
-	DesiredAt       time.Time `json:"desired_at"`
-	DurationMinutes int       `json:"duration_minutes"`
-	ScheduledAt     time.Time `json:"scheduled_at"`
-	WasShifted      bool      `json:"was_shifted"`
-	Reason          string    `json:"reason"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID              string     `json:"id"`
+	OrgID           string     `json:"org_id"`
+	Type            string     `json:"type"`
+	Status          string     `json:"status"`
+	BaseStatus      string     `json:"base_status"`
+	ClientID        string     `json:"client_id,omitempty"`
+	ContractID      string     `json:"contract_id,omitempty"`
+	Note            string     `json:"note"`
+	DesiredAt       time.Time  `json:"desired_at"`
+	DurationMinutes int        `json:"duration_minutes"`
+	ScheduledAt     time.Time  `json:"scheduled_at"`
+	WasShifted      bool       `json:"was_shifted"`
+	Reason          string     `json:"reason"`
+	CompletedAt     *time.Time `json:"completed_at,omitempty"`
+	CancelledAt     *time.Time `json:"cancelled_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 type slotResponse struct {
@@ -46,6 +59,8 @@ func toReminderResponse(r domain.Reminder) reminderResponse {
 		ID:              r.ID(),
 		OrgID:           r.OrgID(),
 		Type:            r.Type().String(),
+		Status:          r.EffectiveStatus(time.Now()).String(),
+		BaseStatus:      r.Status().String(),
 		ClientID:        r.ClientID(),
 		ContractID:      r.ContractID(),
 		Note:            r.Note(),
@@ -54,6 +69,8 @@ func toReminderResponse(r domain.Reminder) reminderResponse {
 		ScheduledAt:     r.ScheduledAt(),
 		WasShifted:      r.WasShifted(),
 		Reason:          r.Reason(),
+		CompletedAt:     r.CompletedAt(),
+		CancelledAt:     r.CancelledAt(),
 		CreatedAt:       r.CreatedAt(),
 	}
 }

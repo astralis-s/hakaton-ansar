@@ -30,5 +30,7 @@ type PrayerTimesProvider interface {
 // ReminderRepository persists reminders, scoped to an organization.
 type ReminderRepository interface {
 	Create(ctx context.Context, r Reminder) (Reminder, error)
+	GetByID(ctx context.Context, orgID, reminderID string) (Reminder, error)
 	ListByOrg(ctx context.Context, orgID string) ([]Reminder, error)
+	Update(ctx context.Context, r Reminder) (Reminder, error)
 }

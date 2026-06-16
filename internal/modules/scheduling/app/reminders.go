@@ -83,3 +83,97 @@ func NewListReminders(reminders domain.ReminderRepository) *ListReminders {
 func (uc *ListReminders) Execute(ctx context.Context, orgID string) ([]domain.Reminder, error) {
 	return uc.reminders.ListByOrg(ctx, orgID)
 }
+
+// GetReminder returns one reminder by id in an organization.
+type GetReminder struct {
+	reminders domain.ReminderRepository
+}
+
+func NewGetReminder(reminders domain.ReminderRepository) *GetReminder {
+	return &GetReminder{reminders: reminders}
+}
+
+func (uc *GetReminder) Execute(ctx context.Context, orgID, reminderID string) (domain.Reminder, error) {
+	return uc.reminders.GetByID(ctx, orgID, reminderID)
+}
+
+// UpdateReminder edits an existing scheduled task and recomputes the slot.
+type UpdateReminder struct {
+	scheduler *domain.Scheduler
+	reminders domain.ReminderRepository
+}
+
+func NewUpdateReminder(scheduler *domain.Scheduler, reminders domain.ReminderRepository) *UpdateReminder {
+	return &UpdateReminder{scheduler: scheduler, reminders: reminders}
+}
+
+type UpdateReminderInput struct {
+	OrgID           string
+	ReminderID      string
+	Type            string
+	ClientID        string
+	ContractID      string
+	Note            string
+	DesiredAt       time.Time
+	DurationMinutes int
+}
+
+func (uc *UpdateReminder) Execute(ctx context.Context, in UpdateReminderInput) (domain.Reminder, error) {
+	reminder, err := uc.reminders.GetByID(ctx, in.OrgID, in.ReminderID)
+	if err != nil {
+		return domain.Reminder{}, err
+	}
+	rType, err := domain.ParseReminderType(in.Type)
+	if err != nil {
+		return domain.Reminder{}, err
+	}
+	dur := time.Duration(in.DurationMinutes) * time.Minute
+	slot, err := uc.scheduler.FindSlot(ctx, in.DesiredAt, dur)
+	if err != nil {
+		return domain.Reminder{}, err
+	}
+	if err := reminder.Update(rType, in.ClientID, in.ContractID, in.Note, in.DesiredAt, dur, slot); err != nil {
+		return domain.Reminder{}, err
+	}
+	return uc.reminders.Update(ctx, reminder)
+}
+
+// CompleteReminder closes a task as done.
+type CompleteReminder struct {
+	reminders domain.ReminderRepository
+}
+
+func NewCompleteReminder(reminders domain.ReminderRepository) *CompleteReminder {
+	return &CompleteReminder{reminders: reminders}
+}
+
+func (uc *CompleteReminder) Execute(ctx context.Context, orgID, reminderID string) (domain.Reminder, error) {
+	reminder, err := uc.reminders.GetByID(ctx, orgID, reminderID)
+	if err != nil {
+		return domain.Reminder{}, err
+	}
+	if err := reminder.Complete(time.Now()); err != nil {
+		return domain.Reminder{}, err
+	}
+	return uc.reminders.Update(ctx, reminder)
+}
+
+// CancelReminder closes a task without completion.
+type CancelReminder struct {
+	reminders domain.ReminderRepository
+}
+
+func NewCancelReminder(reminders domain.ReminderRepository) *CancelReminder {
+	return &CancelReminder{reminders: reminders}
+}
+
+func (uc *CancelReminder) Execute(ctx context.Context, orgID, reminderID string) (domain.Reminder, error) {
+	reminder, err := uc.reminders.GetByID(ctx, orgID, reminderID)
+	if err != nil {
+		return domain.Reminder{}, err
+	}
+	if err := reminder.Cancel(time.Now()); err != nil {
+		return domain.Reminder{}, err
+	}
+	return uc.reminders.Update(ctx, reminder)
+}

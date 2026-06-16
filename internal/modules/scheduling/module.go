@@ -37,6 +37,10 @@ func New(d Deps) *Module {
 		Schedule: app.NewScheduleReminder(scheduler, reminders),
 		Preview:  app.NewPreviewSlot(scheduler),
 		List:     app.NewListReminders(reminders),
+		Get:      app.NewGetReminder(reminders),
+		Update:   app.NewUpdateReminder(scheduler, reminders),
+		Complete: app.NewCompleteReminder(reminders),
+		Cancel:   app.NewCancelReminder(reminders),
 		Log:      d.Log,
 	})
 	return &Module{handler: handler}

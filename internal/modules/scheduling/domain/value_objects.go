@@ -29,6 +29,35 @@ func ParseReminderType(s string) (ReminderType, error) {
 
 func (t ReminderType) String() string { return string(t) }
 
+// ReminderStatus is the stored lifecycle state of a task.
+type ReminderStatus string
+
+const (
+	ReminderScheduled ReminderStatus = "scheduled"
+	ReminderCompleted ReminderStatus = "completed"
+	ReminderCancelled ReminderStatus = "cancelled"
+	ReminderOverdue   ReminderStatus = "overdue" // derived for UI/API, never stored
+)
+
+func ParseReminderStatus(s string) (ReminderStatus, error) {
+	switch ReminderStatus(strings.ToLower(strings.TrimSpace(s))) {
+	case ReminderScheduled:
+		return ReminderScheduled, nil
+	case ReminderCompleted:
+		return ReminderCompleted, nil
+	case ReminderCancelled:
+		return ReminderCancelled, nil
+	default:
+		return "", ErrInvalidReminderStatus
+	}
+}
+
+func (s ReminderStatus) String() string { return string(s) }
+
+func (s ReminderStatus) Stored() bool {
+	return s == ReminderScheduled || s == ReminderCompleted || s == ReminderCancelled
+}
+
 // TimeOfDay is a wall-clock hour:minute (used for the Jummah window).
 type TimeOfDay struct {
 	Hour   int
