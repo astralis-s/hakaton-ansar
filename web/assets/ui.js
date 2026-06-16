@@ -79,8 +79,6 @@
     reminderType: { call: 'Звонок', delivery: 'Доставка', payment_followup: 'Контакт по платежу' },
     stockReason: { receipt: 'Поступление', sale: 'Продажа', adjustment: 'Корректировка', writeoff: 'Списание' },
     stockReasonChip: { receipt: 'chip-halal', sale: 'chip-info', adjustment: 'chip-pending', writeoff: 'chip-haram' },
-    requestStatus: { pending: 'На рассмотрении', approved: 'Одобрена', rejected: 'Отклонена' },
-    requestStatusChip: { pending: 'chip-pending', approved: 'chip-halal', rejected: 'chip-haram' },
   };
 
   function Chip(p) {
@@ -91,7 +89,6 @@
     var cls = 'chip-' + p.value;
     if (p.map === 'halal') cls = labels.halalChip[p.value] || 'chip-info';
     if (p.map === 'stockReason') cls = labels.stockReasonChip[p.value] || 'chip-info';
-    if (p.map === 'requestStatus') cls = labels.requestStatusChip[p.value] || 'chip-info';
     if (p.map === 'reminderStatus' && p.value === 'scheduled') cls = 'chip-pending';
     return html`<${Chip} cls=${cls} label=${label}/>`;
   }
@@ -125,10 +122,6 @@
     </div>`;
   }
 
-  /* Reusable chat thread: loads messages via props.load(), polls every 4s, aligns
-     bubbles by sender (props.meKind), and sends via props.onSend(body). Reused by
-     the staff chat screen and the client portal. Re-mounts when props.threadKey
-     changes (e.g. a different conversation is selected). */
   function ChatThread(p) {
     var st = React.useState({ msgs: [], loading: true, err: '' }), s = st[0], set = st[1];
     var bd = React.useState(''), body = bd[0], setBody = bd[1];
@@ -139,31 +132,40 @@
     React.useEffect(function () {
       var alive = true;
       function pull(initial) {
-        p.load().then(function (r) { if (alive) set({ msgs: r || [], loading: false, err: '' }); })
-          .catch(function (e) { if (alive && initial) set({ msgs: [], loading: false, err: e.message || 'Ошибка' }); });
+        p.load().then(function (r) {
+          if (alive) set({ msgs: r || [], loading: false, err: '' });
+        }).catch(function (e) {
+          if (alive && initial) set({ msgs: [], loading: false, err: e.message || 'Ошибка' });
+        });
       }
       set({ msgs: [], loading: true, err: '' });
       pull(true);
-      var t = setInterval(function () { pull(false); }, 4000);
+      var t = setInterval(function () { pull(false); }, p.pollMs || 4000);
       return function () { alive = false; clearInterval(t); };
     }, [key]);
 
-    React.useEffect(function () { if (endRef.current) endRef.current.scrollIntoView({ block: 'end' }); }, [s.msgs.length]);
+    React.useEffect(function () {
+      if (endRef.current) endRef.current.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    }, [s.msgs.length]);
 
     function send() {
       var text = body.trim();
       if (!text || sending) return;
       setSending(true);
       p.onSend(text).then(function () {
-        setBody(''); setSending(false);
-        p.load().then(function (r) { set({ msgs: r || [], loading: false, err: '' }); }).catch(function () {});
-      }).catch(function (e) { setSending(false); if (p.onError) p.onError(e); });
+        setBody('');
+        setSending(false);
+        return p.load().then(function (r) { set({ msgs: r || [], loading: false, err: '' }); }).catch(function () {});
+      }).catch(function (e) {
+        setSending(false);
+        if (p.onError) p.onError(e);
+      });
     }
 
     var inner;
     if (s.loading) inner = html`<${Loading}/>`;
     else if (s.err) inner = html`<div class="banner banner-warn">${s.err}</div>`;
-    else if (s.msgs.length === 0) inner = html`<div class="chat-empty">${p.emptyText || 'Сообщений пока нет. Напишите первым!'}</div>`;
+    else if (s.msgs.length === 0) inner = html`<div class="chat-thread-empty">${p.emptyText || 'Сообщений пока нет.'}</div>`;
     else inner = s.msgs.map(function (m) {
       var mine = m.sender_kind === p.meKind;
       return html`<div key=${m.id} class=${'chat-row ' + (mine ? 'mine' : 'theirs')}>
@@ -175,13 +177,14 @@
     });
 
     return html`<div class="chat-thread">
-      <div class="chat-messages">${inner}<div ref=${endRef}></div></div>
-      <div class="chat-composer">
+      <div class="chat-thread-messages">${inner}<div ref=${endRef}></div></div>
+      <div class="chat-thread-composer">
         <input class="input" placeholder=${p.placeholder || 'Сообщение…'} value=${body}
           onInput=${function (e) { setBody(e.target.value); }}
-          onKeyDown=${function (e) { if (e.key === 'Enter') send(); }}/>
+          onKeyDown=${function (e) { if (e.key === 'Enter' && !e.shiftKey) send(); }}/>
         <button class="btn btn-primary" disabled=${sending || !body.trim()} onClick=${send} aria-label="Отправить">
-          ${sending ? html`<${Spinner}/>` : html`<${Icon} name="send" size=${17}/>`}</button>
+          ${sending ? html`<${Spinner}/>` : html`<${Icon} name="send" size=${17}/>`}
+        </button>
       </div>
     </div>`;
   }
