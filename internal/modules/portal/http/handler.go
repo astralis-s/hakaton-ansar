@@ -82,12 +82,12 @@ func (h *Handler) TelegramLink(w http.ResponseWriter, r *http.Request) {
 		web.JSON(w, http.StatusOK, telegramLinkResponse{Available: false})
 		return
 	}
-	url, available, err := h.tgLink.ManagerLink(r.Context(), p.OrgID, p.UserID)
+	url, qr, available, err := h.tgLink.ManagerLink(r.Context(), p.OrgID, p.UserID)
 	if err != nil {
 		apperror.Write(w, r, h.log, apperror.Internal("telegram link failed", err))
 		return
 	}
-	web.JSON(w, http.StatusOK, telegramLinkResponse{Available: available, URL: url})
+	web.JSON(w, http.StatusOK, telegramLinkResponse{Available: available, URL: url, QR: qr})
 }
 
 // RegisterPublicPortalRoutes mounts the unauthenticated client login route.

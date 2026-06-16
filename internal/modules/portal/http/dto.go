@@ -45,6 +45,7 @@ type accessResponse struct {
 type telegramLinkResponse struct {
 	Available bool   `json:"available"`
 	URL       string `json:"url,omitempty"`
+	QR        string `json:"qr,omitempty"` // data:image/png;base64,... of the URL
 }
 
 type messageResponse struct {
